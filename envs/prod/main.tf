@@ -46,7 +46,7 @@ module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
   name           = var.image_optimizer_lambda_name
-  image_uri = var.image_optimizer_image_tag == "" ? "" : "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
+  image_uri      = var.image_optimizer_image_tag == "" ? "" : "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
   bucket_name    = module.storage.bucket
   bucket_arn     = module.storage.bucket_arn
   queue_url      = module.queue.queue_url
