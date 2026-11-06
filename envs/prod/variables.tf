@@ -137,5 +137,5 @@ variable "backend_ecr_repository_uri" {
 variable "image_optimizer_ecr_repository_uri" {
   description = "Full URI of the shared image optimizer ECR repository."
   type        = string
-  default     = "187692046882.dkr.ecr.ca-central-1.amazonaws.com/vestio/lambda-image-optimizer"
+  default     = "187692046882.dkr.ecr.ca-central-1.amazonaws.com/vestio/image-optimizer"
 }
