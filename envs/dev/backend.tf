@@ -2,7 +2,7 @@
 # The bucket must exist before `terraform init` — see README "State backend".
 terraform {
   backend "s3" {
-    bucket       = "vestio-terraform-state"
+    bucket       = "vestio-terraform-state-cac1"
     key          = "dev/terraform.tfstate"
     region       = "ca-central-1"
     encrypt      = true
