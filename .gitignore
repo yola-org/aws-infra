@@ -7,7 +7,6 @@ crash.log
 crash.*.log
 
 # Real variable files may contain secrets — keep only the example
-terraform.tfvars
 # Overrides
 override.tf
 override.tf.json

@@ -1,0 +1,1 @@
+image_optimizer_image_tag = ""
