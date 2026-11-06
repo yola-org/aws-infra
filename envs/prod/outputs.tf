@@ -23,11 +23,6 @@ output "image_optimizer_dlq_url" {
   value       = module.queue.dlq_url
 }
 
-output "ecr_repository_urls" {
-  description = "URLs of the created ECR repositories."
-  value       = module.registry.repository_urls
-}
-
 output "image_optimizer_lambda_name" {
   description = "Name of the image optimizer Lambda (null until image_optimizer_image_uri is set)."
   value       = module.image_optimizer.lambda_name
