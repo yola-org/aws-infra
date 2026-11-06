@@ -8,6 +8,8 @@
 stages:
 - test
 - secret-detection
+- validate
+- deploy
 sast:
   stage: test
 include:
@@ -15,3 +17,112 @@ include:
 - template: Security/Secret-Detection.gitlab-ci.yml
 secret_detection:
   stage: secret-detection
+
+# ---------------------------------------------------------------------------
+# Terraform — branch-scoped per environment
+#
+# Auth:   an AWS admin user's credentials are provided directly as protected
+#         CI/CD variables (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). Terraform
+#         manages NOTHING for CI — it only builds the business infrastructure.
+#
+#         Trade-off of a single admin key: it cannot be scoped per branch, so
+#         cloud jobs run ONLY on pushes/merges to the env branches, and the
+#         variables are protected (dev/prod branches only) + masked.
+#
+#   MR / feature branch -> terraform:validate only (no cloud credentials)
+#   push/merge to `dev` -> validate + dev:plan + dev:apply (automatic)
+#   push/merge to `prod`-> validate + prod:plan + prod:apply (manual)
+#
+# Required CI/CD variables (Settings > CI/CD > Variables — masked AND protected):
+#   AWS_ACCESS_KEY_ID      - access key of the AWS admin user
+#   AWS_SECRET_ACCESS_KEY  - secret of that user
+# Optional:
+#   TF_VAR_backend_environment_sensitive - JSON map of sensitive container env vars
+#   TF_VAR_image_optimizer_image_uri     - e.g. 123456789012.dkr.ecr.ca-central-1.amazonaws.com/vestio/image-optimizer:latest
+# ---------------------------------------------------------------------------
+terraform:validate:
+  stage: validate
+  image:
+    name: hashicorp/terraform:1.11
+    entrypoint: [""]
+  script:
+    - terraform fmt -check -recursive
+    - |
+      set -e
+      for dir in envs/*; do
+        echo "== validating $dir"
+        (cd "$dir" && terraform init -backend=false && terraform validate)
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+.terraform_base: &terraform_base
+  image:
+    name: hashicorp/terraform:1.11
+    entrypoint: [""]
+  before_script:
+    - export AWS_DEFAULT_REGION=ca-central-1
+
+terraform:dev:plan:
+  <<: *terraform_base
+  stage: validate
+  script:
+    - cd envs/dev
+    - terraform init
+    - terraform plan -input=false -out=tfplan
+  artifacts:
+    paths:
+      - envs/dev/tfplan
+    expire_in: 1 week
+  rules:
+    # Protected variables only exist on protected branches (dev/prod).
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+terraform:prod:plan:
+  <<: *terraform_base
+  stage: validate
+  script:
+    - cd envs/prod
+    - terraform init
+    - terraform plan -input=false -out=tfplan
+  artifacts:
+    paths:
+      - envs/prod/tfplan
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+
+terraform:dev:apply:
+  <<: *terraform_base
+  stage: deploy
+  script:
+    - cd envs/dev
+    - terraform init
+    - terraform apply -input=false -auto-approve tfplan
+  dependencies:
+    - terraform:dev:plan
+  environment:
+    name: dev
+  # Applies automatically once the MR is merged into `dev`.
+  # Change to `when: manual` to require a button click.
+  when: on_success
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+terraform:prod:apply:
+  <<: *terraform_base
+  stage: deploy
+  script:
+    - cd envs/prod
+    - terraform init
+    - terraform apply -input=false -auto-approve tfplan
+  dependencies:
+    - terraform:prod:plan
+  environment:
+    name: prod
+  # Manual even after merge — protect the `prod` environment in GitLab
+  # (Settings > CI/CD > Protected environments) to restrict who can click it.
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
