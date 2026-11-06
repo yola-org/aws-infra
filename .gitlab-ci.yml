@@ -12,7 +12,7 @@ stages:
 - deploy
 
 include:
-  - project: 'tech1212145/ci-templates'
+  - project: 'tech1212145/ci-templates/templates'
     ref: main
     file: '/security.yml'
 
