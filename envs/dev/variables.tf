@@ -63,9 +63,11 @@ variable "cognito_name" {
 variable "backend_ecr_repository_uri" {
   description = "Full URI of the shared backend ECR repository."
   type        = string
+  default     = "187692046882.dkr.ecr.ca-central-1.amazonaws.com/vestio/backend"
 }
 
 variable "image_optimizer_ecr_repository_uri" {
   description = "Full URI of the shared image optimizer ECR repository."
   type        = string
+  default     = "187692046882.dkr.ecr.ca-central-1.amazonaws.com/vestio/lambda-image-optimizer"
 }
