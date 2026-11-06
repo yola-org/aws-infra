@@ -39,8 +39,8 @@ variable "image_optimizer_lambda_name" {
   default     = "vestio-dev-image-optimizer"
 }
 
-variable "image_optimizer_image_uri" {
-  description = "Full ECR image URI (with tag) for the Lambda. Empty = Lambda not created yet."
+variable "image_optimizer_image_tag" {
+  description = "Tag of the image-optimizer image to deploy. Empty = Lambda not created yet."
   type        = string
   default     = ""
 }
@@ -58,18 +58,14 @@ variable "cognito_name" {
   default     = "vestio-dev"
 }
 
-# --- ECR -------------------------------------------------------------------
-variable "ecr_repositories" {
-  description = "ECR repository names to create for dev."
-  type        = list(string)
-  default = [
-    "vestio/dev-vestio-backend",
-    "vestio/dev-image-optimizer",
-  ]
+# --- Shared ECR repositories (manually managed) ---------------------------
+
+variable "backend_ecr_repository_uri" {
+  description = "Full URI of the shared backend ECR repository."
+  type        = string
 }
 
-variable "ecr_image_retention_count" {
-  description = "Number of tagged images to keep per repository."
-  type        = number
-  default     = 10
+variable "image_optimizer_ecr_repository_uri" {
+  description = "Full URI of the shared image optimizer ECR repository."
+  type        = string
 }

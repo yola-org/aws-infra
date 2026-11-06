@@ -24,13 +24,6 @@ module "queue" {
   visibility_timeout_seconds = var.queue_visibility_timeout_seconds
 }
 
-module "registry" {
-  source = "../../modules/registry"
-
-  repositories          = var.ecr_repositories
-  image_retention_count = var.ecr_image_retention_count
-}
-
 module "cognito" {
   source = "../../modules/cognito"
 
@@ -53,7 +46,7 @@ module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
   name           = var.image_optimizer_lambda_name
-  image_uri      = var.image_optimizer_image_uri
+  image_uri = var.image_optimizer_image_tag == "" ? "" : "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
   bucket_name    = module.storage.bucket
   bucket_arn     = module.storage.bucket_arn
   queue_url      = module.queue.queue_url
@@ -70,7 +63,7 @@ module "backend" {
   desired_capacity                = var.backend_desired_capacity
   min_capacity                    = var.backend_min_capacity
   max_capacity                    = var.backend_max_capacity
-  ecr_repository_url              = module.registry.repository_urls[var.backend_ecr_repository]
+  ecr_repository_url              = var.backend_ecr_repository_uri
   image_tag                       = var.backend_image_tag
   service_role_name               = module.service_role.instance_profile_name
   health_check_path               = var.backend_health_check_path

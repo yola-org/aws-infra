@@ -1,10 +1,11 @@
+
 variable "aws_region" {
   description = "AWS region for all resources."
   type        = string
   default     = "ca-central-1"
 }
 
-# --- Storage (single bucket, static/ listings/ users/ prefixes) -----------
+# --- Storage ---------------------------------------------------------------
 variable "bucket_name" {
   description = "Name of the prod assets bucket."
   type        = string
@@ -39,8 +40,8 @@ variable "image_optimizer_lambda_name" {
   default     = "vestio-image-optimizer"
 }
 
-variable "image_optimizer_image_uri" {
-  description = "Full ECR image URI (with tag) for the Lambda. Empty = Lambda not created yet."
+variable "image_optimizer_image_tag" {
+  description = "Tag of the image-optimizer image to deploy. Empty = Lambda not created yet."
   type        = string
   default     = ""
 }
@@ -53,33 +54,10 @@ variable "watermark_text" {
 
 # --- Cognito ---------------------------------------------------------------
 variable "cognito_name" {
-  description = "Prefix for Cognito resources (pool \"<name>-users\", client \"<name>-backend\")."
+  description = "Prefix for Cognito resources (pool '<name>-users', client '<name>-backend')."
   type        = string
   default     = "vestio"
 }
-
-# --- ECR -------------------------------------------------------------------
-variable "ecr_repositories" {
-  description = "ECR repository names to create."
-  type        = list(string)
-  default = [
-    "vestio/vestio-backend",
-    "vestio/image-optimizer",
-  ]
-}
-
-variable "backend_ecr_repository" {
-  description = "Which entry of ecr_repositories holds the vestio-backend image."
-  type        = string
-  default     = "vestio/vestio-backend"
-}
-
-variable "ecr_image_retention_count" {
-  description = "Number of tagged images to keep per repository."
-  type        = number
-  default     = 20
-}
-
 # --- vestio-backend ALB + ASG ----------------------------------------------
 variable "backend_instance_type" {
   description = "EC2 instance type for vestio-backend instances."
@@ -146,4 +124,16 @@ variable "backend_environment_sensitive" {
   type        = map(string)
   default     = {}
   sensitive   = true
+}
+
+# --- Shared ECR repositories (manually managed) ---------------------------
+
+variable "backend_ecr_repository_uri" {
+  description = "Full URI of the shared backend ECR repository."
+  type        = string
+}
+
+variable "image_optimizer_ecr_repository_uri" {
+  description = "Full URI of the shared image optimizer ECR repository."
+  type        = string
 }

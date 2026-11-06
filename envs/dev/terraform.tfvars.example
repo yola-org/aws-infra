@@ -1,9 +1,0 @@
-# Optional overrides for the dev environment. All non-secret defaults are
-# baked into envs/dev/variables.tf, so this file is NOT required.
-# Copy to terraform.tfvars (gitignored) and adjust if needed.
-
-# bucket_name = "vestio-dev-assets"
-# queue_name  = "vestio-dev-image-optimizer"
-
-# Set once the image-optimizer code repo pushes an image to ECR.
-# image_optimizer_image_uri = "123456789012.dkr.ecr.ca-central-1.amazonaws.com/vestio/dev-image-optimizer:latest"

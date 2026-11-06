@@ -1,3 +1,4 @@
+
 module "storage" {
   source = "../../modules/storage"
 
@@ -12,21 +13,13 @@ module "queue" {
   visibility_timeout_seconds = var.queue_visibility_timeout_seconds
 }
 
-module "registry" {
-  source = "../../modules/registry"
-
-  repositories          = var.ecr_repositories
-  image_retention_count = var.ecr_image_retention_count
-}
-
 module "cognito" {
   source = "../../modules/cognito"
 
   name = var.cognito_name
 }
 
-# EC2 service role for the dev environment (S3, dev SQS queue, Cognito secret
-# read + Cognito admin auth). For the dev backend/frontend when they run.
+# Dev EC2 service role.
 module "service_role" {
   source = "../../modules/service_role"
 
@@ -37,11 +30,12 @@ module "service_role" {
   cognito_user_pool_arn = module.cognito.user_pool_arn
 }
 
+# Dev image optimizer Lambda.
 module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
   name           = var.image_optimizer_lambda_name
-  image_uri      = var.image_optimizer_image_uri
+  image_uri      = var.image_optimizer_image_tag == "" ? "" : "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
   bucket_name    = module.storage.bucket
   bucket_arn     = module.storage.bucket_arn
   queue_url      = module.queue.queue_url

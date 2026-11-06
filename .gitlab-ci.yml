@@ -38,7 +38,7 @@ secret_detection:
 #   AWS_SECRET_ACCESS_KEY  - secret of that user
 # Optional:
 #   TF_VAR_backend_environment_sensitive - JSON map of sensitive container env vars
-#   TF_VAR_image_optimizer_image_uri     - e.g. 123456789012.dkr.ecr.ca-central-1.amazonaws.com/vestio/image-optimizer:latest
+#   TF_VAR_image_optimizer_image_tag     - e.g. latest,15.0.0,15.0.2..
 # ---------------------------------------------------------------------------
 terraform:validate:
   stage: validate
