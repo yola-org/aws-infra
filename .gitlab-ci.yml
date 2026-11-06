@@ -12,7 +12,9 @@ stages:
 - deploy
 
 include:
-  - template: tech1212145/ci-templates/security.yml
+  - project: 'tech/ci-templates'
+    ref: main
+    file: '/security.yml'
 
 # ---------------------------------------------------------------------------
 # Terraform — branch-scoped per environment
