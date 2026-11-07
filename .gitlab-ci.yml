@@ -9,7 +9,6 @@ include:
   - project: 'tech1212145/ci-templates'
     ref: master
     file:
-      - '/templates/security.yml'
       - '/templates/version.yml'
       - '/templates/git-tag.yml'
 
