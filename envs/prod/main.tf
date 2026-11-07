@@ -14,7 +14,7 @@ locals {
   backend_secret_arns = merge(
     module.cognito.secret_arns,
     {
-      "S3/ASSETS_BUCKET_NAME"               = aws_secretsmanager_secret.assets_bucket_name.arn
+      "S3/ASSETS_BUCKET_NAME"            = aws_secretsmanager_secret.assets_bucket_name.arn
       "SQS/IMAGE_OPTIMIZATION_QUEUE_URL" = aws_secretsmanager_secret.image_optimization_queue_url.arn
     },
   )
