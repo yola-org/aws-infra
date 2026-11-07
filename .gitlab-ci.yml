@@ -185,6 +185,8 @@ version-tag-dev:
 
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
+      changes:
+        - '**/*.tf'
 
 version-tag-prod:
   extends: .version:tag
@@ -197,3 +199,5 @@ version-tag-prod:
 
   rules:
     - if: '$CI_COMMIT_BRANCH == "prod"'
+      changes:
+        - '**/*.tf'

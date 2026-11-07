@@ -157,18 +157,20 @@ JWT validation for all other endpoints uses only the public JWKS — no credenti
 
 ### Config is stored in Secrets Manager — one string secret per value
 
-No JSON blobs. Each env creates six Secrets Manager **string secrets**. The name
-is `<PREFIX><SPRING_ENV_KEY>`, where the prefix is `PROD_` for prod and `DEV_`
+No JSON blobs. Each env creates eight Secrets Manager **string secrets**. The name
+is `<PREFIX><SECRET_KEY>`, where the prefix is `PROD/` for prod and `DEV/`
 for dev:
 
 | Secret name (prod / dev) | Container env var | Spring property |
 |---|---|---|
-| `PROD_COGNITO_CLIENT_ID` / `DEV_COGNITO_CLIENT_ID` | `COGNITO_CLIENT_ID` | `cognito.client-id` |
-| `PROD_COGNITO_CLIENT_SECRET` / `DEV_COGNITO_CLIENT_SECRET` | `COGNITO_CLIENT_SECRET` | `cognito.client-secret` |
-| `PROD_COGNITO_USER_POOL_ID` / `DEV_COGNITO_USER_POOL_ID` | `COGNITO_USER_POOL_ID` | `cognito.user-pool-id` |
-| `PROD_COGNITO_REGION` / `DEV_COGNITO_REGION` | `COGNITO_REGION` | `cognito.region` |
-| `PROD_COGNITO_ISSUER_URI` / `DEV_COGNITO_ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
-| `PROD_COGNITO_JWK_SET_URI` / `DEV_COGNITO_JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
+| `PROD/COGNITO/CLIENT_ID` / `DEV/COGNITO/CLIENT_ID` | `COGNITO_CLIENT_ID` | `cognito.client-id` |
+| `PROD/COGNITO/CLIENT_SECRET` / `DEV/COGNITO/CLIENT_SECRET` | `COGNITO_CLIENT_SECRET` | `cognito.client-secret` |
+| `PROD/COGNITO/USER_POOL_ID` / `DEV/COGNITO/USER_POOL_ID` | `COGNITO_USER_POOL_ID` | `cognito.user-pool-id` |
+| `PROD/COGNITO/REGION` / `DEV/COGNITO/REGION` | `COGNITO_REGION` | `cognito.region` |
+| `PROD/COGNITO/ISSUER_URI` / `DEV/COGNITO/ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+| `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
+| `PROD/ASSETS/BUCKET_NAME` / `DEV/ASSETS/BUCKET_NAME` | `S3_ASSETS_BUCKET` | — |
+| `PROD/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` / `DEV/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` | `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` | — |
 
 The backend launch template receives only the **secret names** and their target
 container environment-variable names (an explicit allowlist built from
@@ -179,7 +181,7 @@ variable names to `/etc/vestio-backend.env` (mode `600`), and starts the contain
 template, tfvars, CI variables, `docker run` arguments, or cloud-init logs.
 
 The instance role is granted `secretsmanager:GetSecretValue` +
-`DescribeSecret` on exactly those six ARNs — **no `ListSecrets`** permission.
+`DescribeSecret` on exactly those eight ARNs — **no `ListSecrets`** permission.
 
 Both prod and dev deployments get the unprefixed env vars from the launch
 template; the app never calls Secrets Manager on those servers. Local
@@ -257,11 +259,12 @@ logging to `/var/log/vestio-backend`.
 - **Secrets:** `backend_environment` is for non-secret values only. Runtime
   secrets are fetched from Secrets Manager at boot (see the Cognito section
   above). Register what gets injected with `backend_secret_keys` (defined in
-  both env roots) as `CONTAINER_ENV_NAME = "SECRET_KEY"` — all six Cognito
-  mappings are already there. The environment prefix is added to each secret
+  both env roots) as `CONTAINER_ENV_NAME = "SECRET_KEY"` — the six Cognito
+  mappings plus `S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` are
+  already there. The environment prefix is added to each secret
   key automatically, and the same map drives both the launch template and the
   instance-role read permissions. Dev has no ASG yet, so there it currently
-  drives IAM only. Currently only Cognito-managed keys are registered. Never
+  drives IAM only. Never
   add secret values to tfvars, CI variables, or the launch template.
 
 ## Folder placeholders
