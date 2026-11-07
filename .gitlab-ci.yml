@@ -112,7 +112,8 @@ calculate-version:
 git-tag-dev:
   extends: .git-tag
   stage: release
-  GIT_TAG_PREFIX: "dev-"
+  variables:
+    GIT_TAG_PREFIX: "dev-"
   needs:
     - job: calculate-version
       artifacts: true
