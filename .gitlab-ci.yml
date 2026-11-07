@@ -108,16 +108,22 @@ terraform:prod:apply:
 calculate-version:
   extends: .version
 
-git-tag:
+
+git-tag-dev:
   extends: .git-tag
-  stage: deploy
+  stage: release
+  GIT_TAG_PREFIX: "dev-"
   needs:
     - job: calculate-version
       artifacts: true
-    - job: terraform:dev:apply
-      optional: true                 # only exists on dev
-    - job: terraform:prod:apply
-      optional: true                 # only exists on prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+git-tag:
+  extends: .git-tag
+  stage: release
+  needs:
+    - job: calculate-version
+      artifacts: true
   rules:
     - if: $CI_COMMIT_BRANCH == "prod"
-    - if: $CI_COMMIT_BRANCH == "dev"
