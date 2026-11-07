@@ -5,7 +5,7 @@ locals {
   backend_secret_arns = merge(
     module.cognito.secret_arns,
     {
-      "ASSETS/BUCKET_NAME"               = aws_secretsmanager_secret.assets_bucket_name.arn
+      "S3/ASSETS_BUCKET_NAME"               = aws_secretsmanager_secret.assets_bucket_name.arn
       "SQS/IMAGE_OPTIMIZATION_QUEUE_URL" = aws_secretsmanager_secret.image_optimization_queue_url.arn
     },
   )
@@ -45,7 +45,7 @@ module "queue" {
 # These configuration values are prepared for the future dev backend and are
 # included in the dev service role's allowlisted secret-read permissions.
 resource "aws_secretsmanager_secret" "assets_bucket_name" {
-  name                    = "${var.secret_name_prefix}ASSETS/BUCKET_NAME"
+  name                    = "${var.secret_name_prefix}S3/ASSETS_BUCKET_NAME"
   description             = "Assets bucket name for vestio-dev backend"
   recovery_window_in_days = 0
 }

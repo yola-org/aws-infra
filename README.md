@@ -169,7 +169,7 @@ for dev:
 | `PROD/COGNITO/REGION` / `DEV/COGNITO/REGION` | `COGNITO_REGION` | `cognito.region` |
 | `PROD/COGNITO/ISSUER_URI` / `DEV/COGNITO/ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
 | `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
-| `PROD/ASSETS/BUCKET_NAME` / `DEV/ASSETS/BUCKET_NAME` | `S3_ASSETS_BUCKET` | — |
+| `PROD/S3/ASSETS_BUCKET_NAME` / `DEV/S3/ASSETS_BUCKET_NAME` | `S3_ASSETS_BUCKET` | — |
 | `PROD/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` / `DEV/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` | `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` | — |
 
 The backend launch template receives only the **secret names** and their target
