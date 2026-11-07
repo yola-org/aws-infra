@@ -13,7 +13,7 @@ stages:
 
 include:
   - project: 'tech1212145/ci-templates'
-    ref: main
+    ref: master
     file: '/templates/security.yml'
 
 # ---------------------------------------------------------------------------
