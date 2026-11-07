@@ -109,7 +109,7 @@ terraform:prod:apply:
 calculate-version:
   extends: .version
 
-git-tag-dev:
+git-tag:
   extends: [.git-tag]
   needs:
     - job: calculate-version
@@ -117,4 +117,4 @@ git-tag-dev:
     - job: terraform:prod:apply
       artifacts: true
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod"
+    - if: $CI_COMMIT_BRANCH == "prod"
