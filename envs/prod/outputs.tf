@@ -53,9 +53,14 @@ output "cognito_jwks_uri" {
   value       = module.cognito.jwks_uri
 }
 
-output "cognito_client_secret_secret_id" {
-  description = "Secrets Manager secret ID holding the prod Cognito configuration JSON (read by the app at startup via instance profile)."
-  value       = module.cognito.client_secret_secret_id
+output "cognito_secret_names" {
+  description = "Prod Secrets Manager secret names holding the individual Cognito values (PROD_ prefix)."
+  value       = module.cognito.secret_names
+}
+
+output "cognito_secret_arns" {
+  description = "Map of unprefixed env-var key => prod Secrets Manager secret ARN."
+  value       = module.cognito.secret_arns
 }
 
 output "service_role_name" {

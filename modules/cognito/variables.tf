@@ -21,10 +21,20 @@ variable "deletion_protection" {
   default     = "INACTIVE"
 }
 
-variable "client_secret_secret_name" {
-  description = "Name of the Secrets Manager secret that will hold the app Cognito configuration."
+variable "secret_name_prefix" {
+  description = "Environment prefix for every Secrets Manager secret name, e.g. \"PROD_\" or \"DEV_\"."
   type        = string
-  default     = null
+
+  validation {
+    condition     = can(regex("^[A-Z][A-Z0-9]*_$", var.secret_name_prefix))
+    error_message = "secret_name_prefix must be uppercase, end with an underscore, and look like PROD_ or DEV_."
+  }
+}
+
+variable "secret_recovery_window_in_days" {
+  description = "Days Secrets Manager keeps deleted secrets recoverable. Use 0 in non-production to allow immediate recreation."
+  type        = number
+  default     = 7
 }
 
 variable "access_token_validity_hours" {

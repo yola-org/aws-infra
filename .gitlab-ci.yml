@@ -1,43 +1,24 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
-# Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/dependency_scanning_sbom/#customizing-analyzer-behavior
-# Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
 stages:
-- test
-- secret-detection
-- validate
-- deploy
+  - prepare            # new, for calculate-version
+  - secret-detection
+  - validate
+  - deploy
+  - release
 
 include:
   - project: 'tech1212145/ci-templates'
     ref: master
-    file: '/templates/security.yml'
+    file:
+      - '/templates/security.yml'
+      - '/templates/version.yml'
+      - '/templates/git-tag.yml'
 
-# ---------------------------------------------------------------------------
-# Terraform — branch-scoped per environment
-#
-# Auth:   an AWS admin user's credentials are provided directly as protected
-#         CI/CD variables (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). Terraform
-#         manages NOTHING for CI — it only builds the business infrastructure.
-#
-#         Trade-off of a single admin key: it cannot be scoped per branch, so
-#         cloud jobs run ONLY on pushes/merges to the env branches, and the
-#         variables are protected (dev/prod branches only) + masked.
-#
-#   MR / feature branch -> terraform:validate only (no cloud credentials)
-#   push/merge to `dev` -> validate + dev:plan + dev:apply (automatic)
-#   push/merge to `prod`-> validate + prod:plan + prod:apply (manual)
-#
-# Required CI/CD variables (Settings > CI/CD > Variables — masked AND protected):
-#   AWS_ACCESS_KEY_ID      - access key of the AWS admin user
-#   AWS_SECRET_ACCESS_KEY  - secret of that user
-# Optional:
-#   TF_VAR_backend_environment_sensitive - JSON map of sensitive container env vars
-#   TF_VAR_image_optimizer_image_tag     - e.g. latest,15.0.0,15.0.2..
-# ---------------------------------------------------------------------------
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: always
+
 terraform:validate:
   stage: validate
   image:
@@ -124,3 +105,14 @@ terraform:prod:apply:
   when: manual
   rules:
     - if: $CI_COMMIT_BRANCH == "prod"
+
+calculate-version:
+  extends: .version
+
+git-tag-dev:
+  extends: [.git-tag, .default-branch-only]
+  needs:
+    - job: calculate-version
+      artifacts: true
+    - job: terraform:prod:apply
+      artifacts: true

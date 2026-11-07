@@ -58,6 +58,30 @@ variable "cognito_name" {
   default     = "vestio-dev"
 }
 
+variable "secret_name_prefix" {
+  description = "Prefix for every Secrets Manager secret name. The launch template strips it before injecting env vars."
+  type        = string
+  default     = "DEV_"
+}
+
+variable "backend_secret_keys" {
+  description = <<-EOT
+    Unprefixed Secrets Manager keys registered for the backend. The environment
+    prefix (secret_name_prefix) is added automatically. All Cognito keys are
+    registered by default. Dev has no ASG yet, so this list drives the dev IAM
+    policy today and will drive injection when a dev backend is added.
+  EOT
+  type        = list(string)
+  default = [
+    "COGNITO_CLIENT_ID",
+    "COGNITO_CLIENT_SECRET",
+    "COGNITO_ISSUER_URI",
+    "COGNITO_JWK_SET_URI",
+    "COGNITO_REGION",
+    "COGNITO_USER_POOL_ID",
+  ]
+}
+
 # --- Shared ECR repositories (manually managed) ---------------------------
 
 variable "backend_ecr_repository_uri" {

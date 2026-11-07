@@ -58,6 +58,12 @@ variable "cognito_name" {
   type        = string
   default     = "vestio"
 }
+
+variable "secret_name_prefix" {
+  description = "Prefix for every Secrets Manager secret name. The launch template strips it before injecting env vars."
+  type        = string
+  default     = "PROD_"
+}
 # --- vestio-backend ALB + ASG ----------------------------------------------
 variable "backend_instance_type" {
   description = "EC2 instance type for vestio-backend instances."
@@ -114,16 +120,26 @@ variable "acm_certificate_arn" {
 }
 
 variable "backend_environment" {
-  description = "Non-secret environment variables for the backend container (BUCKET_NAME and AWS_REGION are added automatically)."
+  description = "Non-secret environment variables for the backend container (BUCKET_NAME and AWS_REGION are added automatically). Secrets are read from Secrets Manager at boot."
   type        = map(string)
   default     = {}
 }
 
-variable "backend_environment_sensitive" {
-  description = "Sensitive environment variables for the backend container. Set via TF_VAR_backend_environment_sensitive in CI or a local untracked tfvars — never commit."
-  type        = map(string)
-  default     = {}
-  sensitive   = true
+variable "backend_secret_keys" {
+  description = <<-EOT
+    Unprefixed Secrets Manager keys fetched at boot and injected into the backend
+    container. The environment prefix (secret_name_prefix) is added automatically.
+    All Cognito keys are registered by default.
+  EOT
+  type        = list(string)
+  default = [
+    "COGNITO_CLIENT_ID",
+    "COGNITO_CLIENT_SECRET",
+    "COGNITO_ISSUER_URI",
+    "COGNITO_JWK_SET_URI",
+    "COGNITO_REGION",
+    "COGNITO_USER_POOL_ID",
+  ]
 }
 
 # --- Shared ECR repositories (manually managed) ---------------------------

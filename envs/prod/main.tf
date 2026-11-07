@@ -1,5 +1,6 @@
-# Cognito values are NOT injected anywhere — the app fetches them from
-# Secrets Manager at startup via its instance profile (see modules/backend).
+# Cognito values live in individual PROD_-prefixed Secrets Manager secrets.
+# The backend launch template fetches them at boot, strips PROD_, and injects
+# them as container env vars (see modules/backend).
 locals {
   backend_environment = merge(
     {
@@ -8,6 +9,27 @@ locals {
     },
     var.backend_environment,
   )
+
+  # Single registration point for secrets injected into the backend.
+  # The keys come from the cognito module.
+  backend_secret_arns = module.cognito.secret_arns
+
+  backend_secret_names = [
+    for key in var.backend_secret_keys : "${var.secret_name_prefix}${key}"
+  ]
+
+  backend_secret_read_arns = [
+    for key in var.backend_secret_keys : local.backend_secret_arns[key]
+  ]
+}
+
+check "backend_secret_keys_have_arns" {
+  assert {
+    condition = alltrue([
+      for key in var.backend_secret_keys : contains(keys(local.backend_secret_arns), key)
+    ])
+    error_message = "Every backend_secret_keys entry must exist in module.cognito.secret_arns."
+  }
 }
 
 module "storage" {
@@ -27,7 +49,9 @@ module "queue" {
 module "cognito" {
   source = "../../modules/cognito"
 
-  name = var.cognito_name
+  name                           = var.cognito_name
+  secret_name_prefix             = var.secret_name_prefix
+  secret_recovery_window_in_days = 7
 }
 
 # EC2 service role for this environment (S3, SQS, Cognito secret read, Cognito
@@ -38,7 +62,7 @@ module "service_role" {
   name                  = "vestio-prod-service-role"
   bucket_arn            = module.storage.bucket_arn
   queue_arn             = module.queue.queue_arn
-  secret_read_arns      = [module.cognito.client_secret_secret_arn]
+  secret_read_arns      = local.backend_secret_read_arns
   cognito_user_pool_arn = module.cognito.user_pool_arn
 }
 
@@ -57,18 +81,19 @@ module "image_optimizer" {
 module "backend" {
   source = "../../modules/backend"
 
-  name_prefix                     = "vestio-backend"
-  vpc_cidr                        = var.backend_vpc_cidr
-  instance_type                   = var.backend_instance_type
-  desired_capacity                = var.backend_desired_capacity
-  min_capacity                    = var.backend_min_capacity
-  max_capacity                    = var.backend_max_capacity
-  ecr_repository_url              = var.backend_ecr_repository_uri
-  image_tag                       = var.backend_image_tag
-  service_role_name               = module.service_role.instance_profile_name
-  health_check_path               = var.backend_health_check_path
-  health_check_matcher            = var.backend_health_check_matcher
-  acm_certificate_arn             = var.acm_certificate_arn
-  environment_variables           = local.backend_environment
-  environment_variables_sensitive = var.backend_environment_sensitive
+  name_prefix           = "vestio-backend"
+  vpc_cidr              = var.backend_vpc_cidr
+  instance_type         = var.backend_instance_type
+  desired_capacity      = var.backend_desired_capacity
+  min_capacity          = var.backend_min_capacity
+  max_capacity          = var.backend_max_capacity
+  ecr_repository_url    = var.backend_ecr_repository_uri
+  image_tag             = var.backend_image_tag
+  service_role_name     = module.service_role.instance_profile_name
+  health_check_path     = var.backend_health_check_path
+  health_check_matcher  = var.backend_health_check_matcher
+  acm_certificate_arn   = var.acm_certificate_arn
+  environment_variables = local.backend_environment
+  secret_names          = local.backend_secret_names
+  secret_name_prefix    = var.secret_name_prefix
 }

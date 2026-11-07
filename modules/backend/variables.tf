@@ -82,11 +82,21 @@ variable "environment_variables" {
   default     = { AWS_REGION = "ca-central-1" }
 }
 
-variable "environment_variables_sensitive" {
-  description = "Sensitive environment variables merged into the container. Never commit real values."
-  type        = map(string)
-  default     = {}
-  sensitive   = true
+variable "secret_names" {
+  description = "Secrets Manager secret names to fetch at boot and inject as container env vars. Values never appear in Terraform or user-data."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for name in var.secret_names : startswith(name, var.secret_name_prefix)])
+    error_message = "Every entry in secret_names must start with secret_name_prefix."
+  }
+}
+
+variable "secret_name_prefix" {
+  description = "Environment prefix on secret names that is stripped before exporting, e.g. PROD_ or DEV_."
+  type        = string
+  default     = ""
 }
 
 variable "ecr_repository_url" {

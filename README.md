@@ -10,9 +10,9 @@ modules/
   queue/                   SQS queue + DLQ (redrive, SSE, long polling)
   registry/                ECR repositories (scan-on-push, lifecycle policies)
   image_optimizer_lambda/  container-image Lambda + IAM + SQS event source mapping
-  cognito/                 user pool + app client + Secrets Manager entry (full config JSON)
-  service_role/            EC2 service role + instance profile (S3, SQS, Cognito secret read, Cognito admin)
-  backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data
+  cognito/                 user pool + app client + per-value Secrets Manager entries (PROD_/DEV_ prefixed)
+  service_role/            EC2 service role + instance profile (S3, SQS, prefixed secret read, Cognito admin)
+  backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data (fetches secrets at boot)
 envs/
   dev/                     dev environment root (bucket + queue + dev Lambda + dev ECR + dev service role — NO ALB/ASG)
   prod/                    prod environment root (everything + prod service role + vestio-backend ALB/ASG)
@@ -52,9 +52,28 @@ credentials from protected CI/CD variables (see below). Per environment:
 ```bash
 cd envs/prod        # or envs/dev
 terraform init
+terraform fmt -check -recursive
+terraform validate
 terraform plan
-terraform apply    # or merge to the env branch and let CI apply it
 ```
+
+## Apply policy — plan and validate only
+
+**Never run `terraform apply`** (or `terraform destroy`, `terraform import`, or
+`terraform state` mutations) automatically. This applies to local runs,
+scripts, AI agents, and any other automation.
+
+The only allowed default flow is:
+
+1. `terraform fmt -check -recursive`
+2. `terraform init` / `terraform init -backend=false`
+3. `terraform validate`
+4. `terraform plan`
+
+Run `terraform apply` **only** when the user explicitly asks for it and confirms
+the environment, the plan, and the expected changes. If there is any doubt, stop
+and ask first. The GitLab pipeline's own apply jobs are defined separately in
+`.gitlab-ci.yml`; this policy covers manual and agent-run commands.
 
 No `terraform.tfvars` is required — all non-secret defaults live in each env's
 `variables.tf`. Optional overrides: copy `terraform.tfvars.example` (gitignored) and adjust.
@@ -83,9 +102,9 @@ If you don't want remote state yet, comment out `backend.tf` and use local state
 Do **not** commit placeholder secrets to be sed-replaced in CI. Instead:
 
 - **Non-secret config** → baked into `envs/<env>/variables.tf` (env-specific defaults).
-- **CI** → secrets are masked, protected CI/CD variables, consumed as `TF_VAR_*`
-  (e.g. `TF_VAR_backend_environment_sensitive` = JSON map of sensitive container env
-  vars). Terraform picks them up automatically.
+- **CI** → secrets are masked, protected CI/CD variables. Runtime secrets are
+  not passed through Terraform at all: they live in Secrets Manager and the
+  backend launch template reads them at boot via the instance profile.
 - **Local runs** → untracked `terraform.tfvars` (gitignored) or shell exports.
 - If you already run **HashiCorp Vault**, prefer it for secret env vars over CI
   variables: authenticate the job to Vault (AppRole/JWT auth) and `vault read` the
@@ -119,8 +138,7 @@ not IAM — keep `prod` apply manual and protect the `prod` branch/environment
 CI variables (prefer IAM Identity Center short-lived tokens if your plan supports
 them — same variables, no storage of static keys at all).
 
-Optional CI/CD variables: `TF_VAR_backend_environment_sensitive`,
-`TF_VAR_image_optimizer_image_uri`.
+Optional CI/CD variable: `TF_VAR_image_optimizer_image_uri`.
 
 ## Cognito (both environments)
 
@@ -137,52 +155,75 @@ needed, SECRET_HASH derived from the client secret), `login` → `AdminInitiateA
 AccessDenied. The app client allows `ALLOW_ADMIN_USER_PASSWORD_AUTH` for the same reason.
 JWT validation for all other endpoints uses only the public JWKS — no credentials.
 
-### Config is stored in Secrets Manager — the only source of Cognito data
+### Config is stored in Secrets Manager — one string secret per value
 
-Tenant-specific Cognito values for each environment are stored in ONE **Secrets
-Manager JSON secret** — Terraform creates it after the pool/client:
+No JSON blobs. Each env creates six Secrets Manager **string secrets**. The name
+is `<PREFIX><SPRING_ENV_KEY>`, where the prefix is `PROD_` for prod and `DEV_`
+for dev:
 
-```json
-{
-  "clientId": "…", "clientSecret": "…", "userPoolId": "…",
-  "issuerUri": "…", "jwkSetUri": "…", "region": "ca-central-1"
-}
-```
+| Secret name (prod / dev) | Container env var | Spring property |
+|---|---|---|
+| `PROD_COGNITO_CLIENT_ID` / `DEV_COGNITO_CLIENT_ID` | `COGNITO_CLIENT_ID` | `cognito.client-id` |
+| `PROD_COGNITO_CLIENT_SECRET` / `DEV_COGNITO_CLIENT_SECRET` | `COGNITO_CLIENT_SECRET` | `cognito.client-secret` |
+| `PROD_COGNITO_USER_POOL_ID` / `DEV_COGNITO_USER_POOL_ID` | `COGNITO_USER_POOL_ID` | `cognito.user-pool-id` |
+| `PROD_COGNITO_REGION` / `DEV_COGNITO_REGION` | `COGNITO_REGION` | `cognito.region` |
+| `PROD_COGNITO_ISSUER_URI` / `DEV_COGNITO_ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+| `PROD_COGNITO_JWK_SET_URI` / `DEV_COGNITO_JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
 
-Secret names: `vestio/cognito-client-secret` (prod) and
-`vestio-dev/cognito-client-secret` (dev).
+The backend launch template receives only the **secret names** (an explicit
+allowlist built from `backend_secret_keys`). At boot, user-data calls
+`secretsmanager:GetSecretValue` for each one through the instance profile,
+strips the `PROD_` / `DEV_` prefix, writes the unprefixed keys to
+`/etc/vestio-backend.env` (mode `600`), and starts the container with
+`docker run --env-file`. Secret values never appear in Terraform, the launch
+template, tfvars, CI variables, `docker run` arguments, or cloud-init logs.
 
-The backend at startup (`CognitoEnvironmentPostProcessor`) fetches the secret
-using the **default AWS credentials chain** — on EC2 that's the
-`vestio-prod-service-role` instance profile (allowed `secretsmanager:GetSecretValue`
-+ `DescribeSecret` on exactly that one secret, plus `cognito-idp:AdminInitiateAuth`
-on the pool). Locally it's your AWS profile.
-**No Cognito environment variables exist anywhere** — nothing is baked into the
-image, the launch template, or tfvars.
+The instance role is granted `secretsmanager:GetSecretValue` +
+`DescribeSecret` on exactly those six ARNs — **no `ListSecrets`** permission.
+
+Both prod and dev deployments get the unprefixed env vars from the launch
+template; the app never calls Secrets Manager on those servers. Local
+development uses the same unprefixed `COGNITO_*` names: a local-only Spring
+resolver (`LocalCognitoSecretsEnvironmentPostProcessor`) reads any missing value
+from the matching `DEV_*` secret using the developer's default AWS credentials.
+
+Spring Boot sees clean keys, so `application.yml` can use either relaxed
+binding or explicit placeholders:
 
 ```yaml
-spring.security.oauth2.resourceserver.jwt.issuer-uri:   ${cognito.issuer-uri}
-spring.security.oauth2.resourceserver.jwt.jwk-set-uri:  ${cognito.jwk-set-uri}
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
+          jwk-set-uri: ${COGNITO_JWK_SET_URI}
 cognito:
-  region:         ${cognito.region}
-  client-id:      ${cognito.client-id}
-  client-secret:  ${cognito.client-secret}
-  user-pool-id:   ${cognito.user-pool-id}
+  region:         ${COGNITO_REGION}
+  client-id:      ${COGNITO_CLIENT_ID}
+  client-secret:  ${COGNITO_CLIENT_SECRET}
+  user-pool-id:   ${COGNITO_USER_POOL_ID}
 ```
 
-Dev's pool/client/secret are created but wired to nothing (dev runs no servers).
+Dev's six secrets and IAM permissions are created, but dev runs no servers yet.
 Outputs: `cognito_user_pool_id`, `cognito_client_id`, `cognito_issuer_uri`,
-`cognito_jwks_uri`, `cognito_client_secret_secret_id`.
+`cognito_jwks_uri`, `cognito_secret_names`, `cognito_secret_arns`.
 
 Notes:
-- Run locally: `AWS_PROFILE=vestio-dev ./gradlew bootRun` — your profile needs only
-  `secretsmanager:GetSecretValue` on `vestio-dev/cognito-client-secret` (+ the pool's
-  `AdminCreateUser`/`AdminSetUserPassword` for the seeded-users sync).
+- Run locally: `./gradlew bootRun` — the `local` profile resolves the six
+  `DEV_*` secrets automatically into `COGNITO_*` via
+  `LocalCognitoSecretsEnvironmentPostProcessor`. Your AWS identity needs
+  `secretsmanager:GetSecretValue` on those six secrets, plus the pool's
+  `AdminCreateUser`/`AdminSetUserPassword` for the seeded-users sync. Exported
+  `COGNITO_*` values take precedence. Dev servers use the launch template, like
+  prod.
+- The old single-JSON secret (`vestio/cognito-client-secret`) is no longer used
+  by the backend.
 - Pool sign-up auto-verifies email via Cognito's default email sender; for real
   deliverability switch `email_configuration` to SES once your domain is verified.
 - Set `deletion_protection = "ACTIVE"` on the pool input when prod is stable.
-- The client secret and pool config also live in the Terraform state — keep state
-  in the encrypted, locked S3 bucket and never commit it.
+- Secret values still live in the Terraform state — keep state in the encrypted,
+  locked S3 bucket and never commit it.
 
 ## The image-optimizer Lambda is intentionally decoupled
 
@@ -213,10 +254,14 @@ logging to `/var/log/vestio-backend`.
   `backend_health_check_matcher = "200-403"` (untracked tfvars or `TF_VAR_*`), or add
   Actuator and point `backend_health_check_path` at `/actuator/health`.
 - **HTTPS:** set `acm_certificate_arn` to enable the 443 listener and redirect 80→443.
-- **Secrets:** `backend_environment` (non-secret) and `backend_environment_sensitive`
-  (sensitive) are merged into the container env. If you use
-  `SPRING_DATASOURCE_URL` etc. via env, pass them as `TF_VAR_backend_environment_sensitive`
-  from CI — never commit them.
+- **Secrets:** `backend_environment` is for non-secret values only. Runtime
+  secrets are fetched from Secrets Manager at boot (see the Cognito section
+  above). Register what gets injected with `backend_secret_keys` (defined in
+  both env roots) — all six Cognito keys are already there. The env prefix is
+  added automatically, and the same list drives both the launch template and
+  the instance-role read permissions. Dev has no ASG yet, so there it currently
+  drives IAM only. Currently only Cognito-managed keys are registered. Never
+  add secret values to tfvars, CI variables, or the launch template.
 
 ## Folder placeholders
 

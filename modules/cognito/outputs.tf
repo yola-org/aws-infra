@@ -18,7 +18,7 @@ output "client_id" {
 }
 
 output "client_secret" {
-  description = "App client secret (sensitive; also stored in the Secrets Manager config secret)."
+  description = "App client secret (sensitive; also stored in Secrets Manager as <prefix>COGNITO_CLIENT_SECRET)."
   value       = aws_cognito_user_pool_client.app.client_secret
   sensitive   = true
 }
@@ -33,12 +33,12 @@ output "jwks_uri" {
   value       = "${local.issuer_uri}/.well-known/jwks.json"
 }
 
-output "client_secret_secret_id" {
-  description = "Secrets Manager secret ID holding the full Cognito config JSON (read by the app at startup via instance profile)."
-  value       = aws_secretsmanager_secret.client_secret.id
+output "secret_names" {
+  description = "Sorted Secrets Manager secret names holding the individual Cognito values (env-prefixed)."
+  value       = [for k in sort(keys(local.cognito_secrets)) : aws_secretsmanager_secret.this[k].name]
 }
 
-output "client_secret_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Cognito config JSON."
-  value       = aws_secretsmanager_secret.client_secret.arn
+output "secret_arns" {
+  description = "Map of unprefixed env-var key => Secrets Manager secret ARN for the Cognito values."
+  value       = { for k, s in aws_secretsmanager_secret.this : k => s.arn }
 }

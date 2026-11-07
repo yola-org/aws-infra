@@ -78,30 +78,34 @@ resource "aws_cognito_user_pool_client" "app" {
   refresh_token_validity = var.refresh_token_validity_days
 }
 
-# Cognito configuration is stored as a single JSON secret so the backend can
-# fetch everything at startup (default AWS credentials chain). The secret is
-# created by this module after the pool/client — nothing is baked into the
-# image/launch template and no env vars are used.
+# Each Cognito value is stored as its own Secrets Manager string secret. The
+# name is prefixed with the environment (PROD_ / DEV_) and the rest of the name
+# is the exact Spring Boot environment-variable key. The backend launch template
+# fetches these secrets at boot, strips the prefix, and injects them as env vars.
 locals {
-  client_secret_secret_name = coalesce(var.client_secret_secret_name, "${var.name}/cognito-client-secret")
-  jwks_uri                  = "${local.issuer_uri}/.well-known/jwks.json"
+  jwks_uri = "${local.issuer_uri}/.well-known/jwks.json"
+
+  cognito_secrets = {
+    COGNITO_CLIENT_ID     = aws_cognito_user_pool_client.app.id
+    COGNITO_CLIENT_SECRET = aws_cognito_user_pool_client.app.client_secret
+    COGNITO_USER_POOL_ID  = aws_cognito_user_pool.this.id
+    COGNITO_REGION        = data.aws_region.current.name
+    COGNITO_ISSUER_URI    = local.issuer_uri
+    COGNITO_JWK_SET_URI   = local.jwks_uri
+  }
 }
 
-resource "aws_secretsmanager_secret" "client_secret" {
-  name                    = local.client_secret_secret_name
-  description             = "Cognito app configuration for ${var.name}-backend (clientId, clientSecret, userPoolId, issuerUri, jwkSetUri, region)"
-  recovery_window_in_days = 7
+resource "aws_secretsmanager_secret" "this" {
+  for_each = local.cognito_secrets
+
+  name                    = "${var.secret_name_prefix}${each.key}"
+  description             = "Cognito ${each.key} for ${var.name}-backend"
+  recovery_window_in_days = var.secret_recovery_window_in_days
 }
 
-resource "aws_secretsmanager_secret_version" "client_secret" {
-  secret_id = aws_secretsmanager_secret.client_secret.id
+resource "aws_secretsmanager_secret_version" "this" {
+  for_each = local.cognito_secrets
 
-  secret_string = jsonencode({
-    clientId     = aws_cognito_user_pool_client.app.id
-    clientSecret = aws_cognito_user_pool_client.app.client_secret
-    userPoolId   = aws_cognito_user_pool.this.id
-    issuerUri    = local.issuer_uri
-    jwkSetUri    = local.jwks_uri
-    region       = data.aws_region.current.name
-  })
+  secret_id     = aws_secretsmanager_secret.this[each.key].id
+  secret_string = each.value
 }

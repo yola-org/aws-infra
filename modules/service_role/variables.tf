@@ -14,7 +14,7 @@ variable "queue_arn" {
 }
 
 variable "secret_read_arns" {
-  description = "Secrets Manager secret ARNs the instance may read at startup (the env's Cognito config secret)."
+  description = "Secrets Manager secret ARNs the instance may read at boot (the env's prefixed application secrets)."
   type        = list(string)
   default     = []
 }

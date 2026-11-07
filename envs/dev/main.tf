@@ -1,4 +1,27 @@
 
+locals {
+  # Single registration point for the credentials the dev backend may consume.
+  # The keys come from the cognito module. Dev has no ASG yet, so this drives IAM.
+  backend_secret_arns = module.cognito.secret_arns
+
+  backend_secret_names = [
+    for key in var.backend_secret_keys : "${var.secret_name_prefix}${key}"
+  ]
+
+  backend_secret_read_arns = [
+    for key in var.backend_secret_keys : local.backend_secret_arns[key]
+  ]
+}
+
+check "backend_secret_keys_have_arns" {
+  assert {
+    condition = alltrue([
+      for key in var.backend_secret_keys : contains(keys(local.backend_secret_arns), key)
+    ])
+    error_message = "Every backend_secret_keys entry must exist in module.cognito.secret_arns."
+  }
+}
+
 module "storage" {
   source = "../../modules/storage"
 
@@ -16,7 +39,9 @@ module "queue" {
 module "cognito" {
   source = "../../modules/cognito"
 
-  name = var.cognito_name
+  name                           = var.cognito_name
+  secret_name_prefix             = var.secret_name_prefix
+  secret_recovery_window_in_days = 0
 }
 
 # Dev EC2 service role.
@@ -26,7 +51,7 @@ module "service_role" {
   name                  = "vestio-dev-service-role"
   bucket_arn            = module.storage.bucket_arn
   queue_arn             = module.queue.queue_arn
-  secret_read_arns      = [module.cognito.client_secret_secret_arn]
+  secret_read_arns      = local.backend_secret_read_arns
   cognito_user_pool_arn = module.cognito.user_pool_arn
 }
 

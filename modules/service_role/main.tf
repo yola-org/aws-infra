@@ -62,8 +62,8 @@ resource "aws_iam_role_policy" "this" {
       ],
       length(var.secret_read_arns) > 0 ? [
         {
-          # Read the environment's Cognito config secret at startup.
-          Sid      = "ReadCognitoSecret"
+          # Read this environment's allowlisted Secrets Manager entries.
+          Sid      = "ReadEnvironmentSecrets"
           Effect   = "Allow"
           Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
           Resource = var.secret_read_arns

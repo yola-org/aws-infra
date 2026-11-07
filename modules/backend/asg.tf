@@ -1,11 +1,10 @@
 data "aws_region" "current" {}
 
 locals {
-  container_env = merge(var.environment_variables, var.environment_variables_sensitive)
-
-  # Escape values for safe embedding in double-quoted shell strings.
+  # Only non-secret values are embedded in the launch template. Secrets are
+  # fetched at boot from Secrets Manager using var.secret_names.
   env_exports = join(" ", [
-    for k, v in local.container_env :
+    for k, v in var.environment_variables :
     "-e ${k}=\"${replace(replace(v, "\\", "\\\\"), "\"", "\\\"")}\""
   ])
 }
@@ -41,12 +40,14 @@ resource "aws_launch_template" "this" {
   }
 
   user_data = base64encode(templatefile("${path.module}/templates/vestio-backend-user-data.sh.tpl", {
-    aws_region  = data.aws_region.current.name
-    ecr_url     = var.ecr_repository_url
-    image_tag   = var.image_tag
-    host_port   = var.host_port
-    app_port    = var.app_port
-    env_exports = local.env_exports
+    aws_region         = data.aws_region.current.name
+    ecr_url            = var.ecr_repository_url
+    image_tag          = var.image_tag
+    host_port          = var.host_port
+    app_port           = var.app_port
+    env_exports        = local.env_exports
+    secret_names       = var.secret_names
+    secret_name_prefix = var.secret_name_prefix
   }))
 
   tag_specifications {

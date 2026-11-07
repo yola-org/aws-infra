@@ -58,7 +58,12 @@ output "cognito_issuer_uri" {
   value       = module.cognito.issuer_uri
 }
 
-output "cognito_client_secret_secret_id" {
-  description = "Secrets Manager secret ID holding the dev Cognito configuration JSON (read by the app at startup)."
-  value       = module.cognito.client_secret_secret_id
+output "cognito_secret_names" {
+  description = "Dev Secrets Manager secret names holding the individual Cognito values (DEV_ prefix)."
+  value       = module.cognito.secret_names
+}
+
+output "cognito_secret_arns" {
+  description = "Map of unprefixed env-var key => dev Secrets Manager secret ARN."
+  value       = module.cognito.secret_arns
 }
