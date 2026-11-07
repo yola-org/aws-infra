@@ -21,7 +21,7 @@ include:
       - '/templates/version.yml'
 
 # ============================================================
-# Workflow
+# Pipeline Configuration
 # ============================================================
 
 workflow:
@@ -31,158 +31,169 @@ workflow:
     - when: always
 
 # ============================================================
-# Terraform Validation
+# Shared Terraform Configuration
 # ============================================================
 
-terraform:validate:
-  stage: validate
+.terraform:
   image:
     name: hashicorp/terraform:1.11
     entrypoint: [""]
+
+  variables:
+    AWS_DEFAULT_REGION: ca-central-1
+
+# ============================================================
+# Terraform Validation
+# ============================================================
+
+terraform-validate:
+  extends: .terraform
+  stage: validate
+
   script:
     - terraform fmt -check -recursive
     - |
       set -e
 
       for dir in envs/*; do
-        echo "== validating $dir"
-        (cd "$dir" && terraform init -backend=false && terraform validate)
+        echo "Validating ${dir}"
+        (
+          cd "$dir"
+          terraform init -backend=false
+          terraform validate
+        )
       done
+
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: $CI_COMMIT_BRANCH
+    - if: '$CI_COMMIT_BRANCH'
 
 # ============================================================
-# Terraform Base
+# Terraform Plan
 # ============================================================
 
-.terraform_base: &terraform_base
-  image:
-    name: hashicorp/terraform:1.11
-    entrypoint: [""]
-  before_script:
-    - export AWS_DEFAULT_REGION=ca-central-1
-
-# ============================================================
-# DEV - Terraform Plan
-# ============================================================
-
-terraform:dev:plan:
-  <<: *terraform_base
+terraform-plan-dev:
+  extends: .terraform
   stage: validate
+
   script:
     - cd envs/dev
     - terraform init
     - terraform plan -input=false -out=tfplan
+
   artifacts:
     paths:
       - envs/dev/tfplan
     expire_in: 1 week
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
-# ============================================================
-# PROD - Terraform Plan
-# ============================================================
-
-terraform:prod:plan:
-  <<: *terraform_base
+terraform-plan-prod:
+  extends: .terraform
   stage: validate
+
   script:
     - cd envs/prod
     - terraform init
     - terraform plan -input=false -out=tfplan
+
   artifacts:
     paths:
       - envs/prod/tfplan
     expire_in: 1 week
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "prod"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
 
 # ============================================================
-# DEV - Terraform Apply
+# Terraform Apply
 # ============================================================
 
-terraform:dev:apply:
-  <<: *terraform_base
+terraform-apply-dev:
+  extends: .terraform
   stage: deploy
+
   script:
     - cd envs/dev
     - terraform init
     - terraform apply -input=false -auto-approve tfplan
+
   dependencies:
-    - terraform:dev:plan
+    - terraform-plan-dev
+
   environment:
     name: dev
-  when: on_success
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
-# ============================================================
-# PROD - Terraform Apply
-# ============================================================
-
-terraform:prod:apply:
-  <<: *terraform_base
+terraform-apply-prod:
+  extends: .terraform
   stage: deploy
+
   script:
     - cd envs/prod
     - terraform init
     - terraform apply -input=false -auto-approve tfplan
+
   dependencies:
-    - terraform:prod:plan
+    - terraform-plan-prod
+
   environment:
     name: prod
+
   when: manual
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "prod"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
 
 # ============================================================
-# DEV - Version Calculation
+# Semantic Version Calculation
 # ============================================================
 
-version:calculate:dev:
+version-calculate-dev:
   extends: .version:calculate
+
   variables:
     VERSION_PREFIX: "dev-"
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
-# ============================================================
-# PROD - Version Calculation
-# ============================================================
-
-version:calculate:prod:
+version-calculate-prod:
   extends: .version:calculate
+
   variables:
     VERSION_PREFIX: "prod-"
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "prod"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
 
 # ============================================================
-# DEV - Git Tag Creation
+# Git Tag Creation
 # ============================================================
 
-version:tag:dev:
+version-tag-dev:
   extends: .version:tag
+
   needs:
-    - job: version:calculate:dev
+    - job: version-calculate-dev
       artifacts: true
-    - job: terraform:dev:apply
+    - job: terraform-apply-dev
       artifacts: false
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
-# ============================================================
-# PROD - Git Tag Creation
-# ============================================================
-
-version:tag:prod:
+version-tag-prod:
   extends: .version:tag
+
   needs:
-    - job: version:calculate:prod
+    - job: version-calculate-prod
       artifacts: true
-    - job: terraform:prod:apply
+    - job: terraform-apply-prod
       artifacts: false
+
   rules:
-    - if: $CI_COMMIT_BRANCH == "prod"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
