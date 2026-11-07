@@ -73,12 +73,12 @@ variable "backend_secret_keys" {
   EOT
   type        = list(string)
   default = [
-    "COGNITO_CLIENT_ID",
-    "COGNITO_CLIENT_SECRET",
-    "COGNITO_ISSUER_URI",
-    "COGNITO_JWK_SET_URI",
-    "COGNITO_REGION",
-    "COGNITO_USER_POOL_ID",
+    "COGNITO/CLIENT_ID",
+    "COGNITO/CLIENT_SECRET",
+    "COGNITO/ISSUER_URI",
+    "COGNITO/JWK_SET_URI",
+    "COGNITO/REGION",
+    "COGNITO/USER_POOL_ID",
   ]
 }
 
