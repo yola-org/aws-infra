@@ -61,7 +61,7 @@ variable "cognito_name" {
 variable "secret_name_prefix" {
   description = "Prefix for every Secrets Manager secret name. The launch template strips it before injecting env vars."
   type        = string
-  default     = "DEV_"
+  default     = "DEV/"
 }
 
 variable "backend_secret_keys" {

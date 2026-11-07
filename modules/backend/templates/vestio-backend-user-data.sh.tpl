@@ -25,7 +25,7 @@ ENV_FILE=/etc/vestio-backend.env
 install -m 600 /dev/null "$ENV_FILE"
 
 for secret_name in "$${SECRET_NAMES[@]}"; do
-  # Strip the environment prefix (PROD_ / DEV_) to get the Spring Boot key.
+  # Strip the environment prefix to get the Spring Boot key.
   env_name="$${secret_name#$${SECRET_NAME_PREFIX}}"
 
   if [ "$env_name" = "$secret_name" ]; then

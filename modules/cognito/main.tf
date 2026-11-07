@@ -86,12 +86,12 @@ locals {
   jwks_uri = "${local.issuer_uri}/.well-known/jwks.json"
 
   cognito_secrets = {
-    COGNITO_CLIENT_ID     = aws_cognito_user_pool_client.app.id
-    COGNITO_CLIENT_SECRET = aws_cognito_user_pool_client.app.client_secret
-    COGNITO_USER_POOL_ID  = aws_cognito_user_pool.this.id
-    COGNITO_REGION        = data.aws_region.current.name
-    COGNITO_ISSUER_URI    = local.issuer_uri
-    COGNITO_JWK_SET_URI   = local.jwks_uri
+    COGNITO/CLIENT_ID     = aws_cognito_user_pool_client.app.id
+    COGNITO/CLIENT_SECRET = aws_cognito_user_pool_client.app.client_secret
+    COGNITO/USER_POOL_ID  = aws_cognito_user_pool.this.id
+    COGNITO/REGION        = data.aws_region.current.name
+    COGNITO/ISSUER_URI    = local.issuer_uri
+    COGNITO/JWK_SET_URI   = local.jwks_uri
   }
 }
 

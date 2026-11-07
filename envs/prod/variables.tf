@@ -62,7 +62,7 @@ variable "cognito_name" {
 variable "secret_name_prefix" {
   description = "Prefix for every Secrets Manager secret name. The launch template strips it before injecting env vars."
   type        = string
-  default     = "PROD_"
+  default     = "PROD/"
 }
 # --- vestio-backend ALB + ASG ----------------------------------------------
 variable "backend_instance_type" {

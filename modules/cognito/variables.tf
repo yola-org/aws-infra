@@ -26,8 +26,8 @@ variable "secret_name_prefix" {
   type        = string
 
   validation {
-    condition     = can(regex("^[A-Z][A-Z0-9]*_$", var.secret_name_prefix))
-    error_message = "secret_name_prefix must be uppercase, end with an underscore, and look like PROD_ or DEV_."
+    condition     = can(regex("^[A-Z][A-Z0-9]*/$", var.secret_name_prefix))
+    error_message = "secret_name_prefix must be uppercase, end with a slash, and look like PROD/ or DEV/."
   }
 }
 
