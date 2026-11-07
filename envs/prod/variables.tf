@@ -127,19 +127,19 @@ variable "backend_environment" {
 
 variable "backend_secret_keys" {
   description = <<-EOT
-    Unprefixed Secrets Manager keys fetched at boot and injected into the backend
-    container. The environment prefix (secret_name_prefix) is added automatically.
+    Backend container environment-variable name => unprefixed Secrets Manager key.
+    The environment prefix (secret_name_prefix) is added to each value automatically.
     All Cognito keys are registered by default.
   EOT
-  type        = list(string)
-  default = [
-    "COGNITO/CLIENT_ID",
-    "COGNITO/CLIENT_SECRET",
-    "COGNITO/ISSUER_URI",
-    "COGNITO/JWK_SET_URI",
-    "COGNITO/REGION",
-    "COGNITO/USER_POOL_ID",
-  ]
+  type        = map(string)
+  default = {
+    COGNITO_CLIENT_ID     = "COGNITO/CLIENT_ID"
+    COGNITO_CLIENT_SECRET = "COGNITO/CLIENT_SECRET"
+    COGNITO_ISSUER_URI    = "COGNITO/ISSUER_URI"
+    COGNITO_JWK_SET_URI   = "COGNITO/JWK_SET_URI"
+    COGNITO_REGION        = "COGNITO/REGION"
+    COGNITO_USER_POOL_ID  = "COGNITO/USER_POOL_ID"
+  }
 }
 
 # --- Shared ECR repositories (manually managed) ---------------------------

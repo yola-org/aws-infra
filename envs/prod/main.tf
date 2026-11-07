@@ -1,6 +1,6 @@
-# Cognito values live in individual PROD_-prefixed Secrets Manager secrets.
-# The backend launch template fetches them at boot, strips PROD_, and injects
-# them as container env vars (see modules/backend).
+# Cognito values live in individual PROD-prefixed Secrets Manager secrets.
+# The backend launch template fetches them at boot and injects each value using
+# the explicitly configured container environment-variable name.
 locals {
   backend_environment = merge(
     {
@@ -14,21 +14,21 @@ locals {
   # The keys come from the cognito module.
   backend_secret_arns = module.cognito.secret_arns
 
-  backend_secret_names = [
-    for key in var.backend_secret_keys : "${var.secret_name_prefix}${key}"
-  ]
+  backend_secret_names = {
+    for env_name, key in var.backend_secret_keys : env_name => "${var.secret_name_prefix}${key}"
+  }
 
   backend_secret_read_arns = [
-    for key in var.backend_secret_keys : local.backend_secret_arns[key]
+    for key in values(var.backend_secret_keys) : local.backend_secret_arns[key]
   ]
 }
 
 check "backend_secret_keys_have_arns" {
   assert {
     condition = alltrue([
-      for key in var.backend_secret_keys : contains(keys(local.backend_secret_arns), key)
+      for key in values(var.backend_secret_keys) : contains(keys(local.backend_secret_arns), key)
     ])
-    error_message = "Every backend_secret_keys entry must exist in module.cognito.secret_arns."
+    error_message = "Every backend_secret_keys value must exist in module.cognito.secret_arns."
   }
 }
 

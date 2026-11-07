@@ -4,21 +4,21 @@ locals {
   # The keys come from the cognito module. Dev has no ASG yet, so this drives IAM.
   backend_secret_arns = module.cognito.secret_arns
 
-  backend_secret_names = [
-    for key in var.backend_secret_keys : "${var.secret_name_prefix}${key}"
-  ]
+  backend_secret_names = {
+    for env_name, key in var.backend_secret_keys : env_name => "${var.secret_name_prefix}${key}"
+  }
 
   backend_secret_read_arns = [
-    for key in var.backend_secret_keys : local.backend_secret_arns[key]
+    for key in values(var.backend_secret_keys) : local.backend_secret_arns[key]
   ]
 }
 
 check "backend_secret_keys_have_arns" {
   assert {
     condition = alltrue([
-      for key in var.backend_secret_keys : contains(keys(local.backend_secret_arns), key)
+      for key in values(var.backend_secret_keys) : contains(keys(local.backend_secret_arns), key)
     ])
-    error_message = "Every backend_secret_keys entry must exist in module.cognito.secret_arns."
+    error_message = "Every backend_secret_keys value must exist in module.cognito.secret_arns."
   }
 }
 

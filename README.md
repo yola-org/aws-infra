@@ -170,11 +170,11 @@ for dev:
 | `PROD_COGNITO_ISSUER_URI` / `DEV_COGNITO_ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
 | `PROD_COGNITO_JWK_SET_URI` / `DEV_COGNITO_JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
 
-The backend launch template receives only the **secret names** (an explicit
-allowlist built from `backend_secret_keys`). At boot, user-data calls
-`secretsmanager:GetSecretValue` for each one through the instance profile,
-strips the `PROD_` / `DEV_` prefix, writes the unprefixed keys to
-`/etc/vestio-backend.env` (mode `600`), and starts the container with
+The backend launch template receives only the **secret names** and their target
+container environment-variable names (an explicit allowlist built from
+`backend_secret_keys`). At boot, user-data calls `secretsmanager:GetSecretValue`
+for each one through the instance profile, writes the configured environment
+variable names to `/etc/vestio-backend.env` (mode `600`), and starts the container with
 `docker run --env-file`. Secret values never appear in Terraform, the launch
 template, tfvars, CI variables, `docker run` arguments, or cloud-init logs.
 
@@ -257,9 +257,10 @@ logging to `/var/log/vestio-backend`.
 - **Secrets:** `backend_environment` is for non-secret values only. Runtime
   secrets are fetched from Secrets Manager at boot (see the Cognito section
   above). Register what gets injected with `backend_secret_keys` (defined in
-  both env roots) — all six Cognito keys are already there. The env prefix is
-  added automatically, and the same list drives both the launch template and
-  the instance-role read permissions. Dev has no ASG yet, so there it currently
+  both env roots) as `CONTAINER_ENV_NAME = "SECRET_KEY"` — all six Cognito
+  mappings are already there. The environment prefix is added to each secret
+  key automatically, and the same map drives both the launch template and the
+  instance-role read permissions. Dev has no ASG yet, so there it currently
   drives IAM only. Currently only Cognito-managed keys are registered. Never
   add secret values to tfvars, CI variables, or the launch template.
 

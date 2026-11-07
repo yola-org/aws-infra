@@ -10,37 +10,23 @@ systemctl enable --now docker
 mkdir -p /var/log/vestio-backend
 chmod 777 /var/log/vestio-backend
 
-# Fetch the allowlisted secrets from Secrets Manager using the instance
-# profile. Only secret names are baked into the launch template; the values are
-# written to a root-only env file so they never appear in user-data, cloud-init
-# logs or the docker command line. Do not add `set -x` to this script.
-SECRET_NAME_PREFIX="${secret_name_prefix}"
-SECRET_NAMES=(
-%{ for name in secret_names ~}
-  "${name}"
-%{ endfor ~}
-)
-
+# Fetch the allowlisted secrets from Secrets Manager using the instance profile.
+# Only secret names and their target environment-variable names are baked into
+# the launch template; values are written to a root-only env file so they never
+# appear in user-data, cloud-init logs or the docker command line. Do not add
+# `set -x` to this script.
 ENV_FILE=/etc/vestio-backend.env
 install -m 600 /dev/null "$ENV_FILE"
 
-for secret_name in "$${SECRET_NAMES[@]}"; do
-  # Strip the environment prefix to get the Spring Boot key.
-  env_name="$${secret_name#$${SECRET_NAME_PREFIX}}"
-
-  if [ "$env_name" = "$secret_name" ]; then
-    echo "Secret $secret_name does not start with $SECRET_NAME_PREFIX" >&2
-    exit 1
-  fi
-
+%{ for env_name, secret_name in secret_names ~}
   secret_value="$(aws secretsmanager get-secret-value \
     --region "${aws_region}" \
-    --secret-id "$secret_name" \
+    --secret-id ${jsonencode(secret_name)} \
     --query SecretString \
     --output text)"
 
-  printf '%s=%s\n' "$env_name" "$secret_value" >> "$ENV_FILE"
-done
+  printf '${env_name}=%s\n' "$secret_value" >> "$ENV_FILE"
+%{ endfor ~}
 
 # Authenticate to ECR
 aws ecr get-login-password --region ${aws_region} \

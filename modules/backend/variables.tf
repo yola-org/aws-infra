@@ -83,13 +83,18 @@ variable "environment_variables" {
 }
 
 variable "secret_names" {
-  description = "Secrets Manager secret names to fetch at boot and inject as container env vars. Values never appear in Terraform or user-data."
-  type        = list(string)
-  default     = []
+  description = "Container environment variable name => Secrets Manager secret name to fetch at boot. Secret values never appear in Terraform or user-data."
+  type        = map(string)
+  default     = {}
 
   validation {
-    condition     = alltrue([for name in var.secret_names : startswith(name, var.secret_name_prefix)])
-    error_message = "Every entry in secret_names must start with secret_name_prefix."
+    condition     = alltrue([for name in values(var.secret_names) : startswith(name, var.secret_name_prefix)])
+    error_message = "Every secret name in secret_names must start with secret_name_prefix."
+  }
+
+  validation {
+    condition     = alltrue([for env_name in keys(var.secret_names) : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", env_name))])
+    error_message = "Every secret_names key must be a valid environment variable name."
   }
 }
 
