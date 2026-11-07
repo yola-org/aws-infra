@@ -86,19 +86,19 @@ locals {
   jwks_uri = "${local.issuer_uri}/.well-known/jwks.json"
 
   cognito_secrets = {
-    CLIENT_ID     = aws_cognito_user_pool_client.app.id
-    CLIENT_SECRET = aws_cognito_user_pool_client.app.client_secret
-    USER_POOL_ID  = aws_cognito_user_pool.this.id
-    REGION        = data.aws_region.current.name
-    ISSUER_URI    = local.issuer_uri
-    JWK_SET_URI   = local.jwks_uri
+    "COGNITO/CLIENT_ID"     = aws_cognito_user_pool_client.app.id
+    "COGNITO/CLIENT_SECRET" = aws_cognito_user_pool_client.app.client_secret
+    "COGNITO/USER_POOL_ID"  = aws_cognito_user_pool.this.id
+    "COGNITO/REGION"        = data.aws_region.current.name
+    "COGNITO/ISSUER_URI"    = local.issuer_uri
+    "COGNITO/JWK_SET_URI"   = local.jwks_uri
   }
 }
 
 resource "aws_secretsmanager_secret" "this" {
   for_each = local.cognito_secrets
 
-  name                    = "${var.secret_name_prefix}COGNITO/${each.key}"
+  name                    = "${var.secret_name_prefix}${each.key}"
   description             = "Cognito ${each.key} for ${var.name}-backend"
   recovery_window_in_days = var.secret_recovery_window_in_days
 }
