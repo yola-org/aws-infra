@@ -1,22 +1,38 @@
+
+# ============================================================
+# GitLab CI/CD - Terraform Infrastructure
+# ============================================================
+
 stages:
-  - prepare            # new, for calculate-version
+  - prepare
   - secret-detection
   - validate
   - deploy
   - release
+
+# ============================================================
+# Shared CI Templates
+# ============================================================
 
 include:
   - project: 'tech1212145/ci-templates'
     ref: master
     file:
       - '/templates/version.yml'
-      - '/templates/git-tag.yml'
+
+# ============================================================
+# Workflow
+# ============================================================
 
 workflow:
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: '$CI_COMMIT_TAG'
       when: never
     - when: always
+
+# ============================================================
+# Terraform Validation
+# ============================================================
 
 terraform:validate:
   stage: validate
@@ -27,13 +43,18 @@ terraform:validate:
     - terraform fmt -check -recursive
     - |
       set -e
+
       for dir in envs/*; do
         echo "== validating $dir"
         (cd "$dir" && terraform init -backend=false && terraform validate)
       done
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: $CI_COMMIT_BRANCH
+
+# ============================================================
+# Terraform Base
+# ============================================================
 
 .terraform_base: &terraform_base
   image:
@@ -41,6 +62,10 @@ terraform:validate:
     entrypoint: [""]
   before_script:
     - export AWS_DEFAULT_REGION=ca-central-1
+
+# ============================================================
+# DEV - Terraform Plan
+# ============================================================
 
 terraform:dev:plan:
   <<: *terraform_base
@@ -54,8 +79,11 @@ terraform:dev:plan:
       - envs/dev/tfplan
     expire_in: 1 week
   rules:
-    # Protected variables only exist on protected branches (dev/prod).
     - if: $CI_COMMIT_BRANCH == "dev"
+
+# ============================================================
+# PROD - Terraform Plan
+# ============================================================
 
 terraform:prod:plan:
   <<: *terraform_base
@@ -71,6 +99,10 @@ terraform:prod:plan:
   rules:
     - if: $CI_COMMIT_BRANCH == "prod"
 
+# ============================================================
+# DEV - Terraform Apply
+# ============================================================
+
 terraform:dev:apply:
   <<: *terraform_base
   stage: deploy
@@ -82,11 +114,13 @@ terraform:dev:apply:
     - terraform:dev:plan
   environment:
     name: dev
-  # Applies automatically once the MR is merged into `dev`.
-  # Change to `when: manual` to require a button click.
   when: on_success
   rules:
     - if: $CI_COMMIT_BRANCH == "dev"
+
+# ============================================================
+# PROD - Terraform Apply
+# ============================================================
 
 terraform:prod:apply:
   <<: *terraform_base
@@ -99,34 +133,56 @@ terraform:prod:apply:
     - terraform:prod:plan
   environment:
     name: prod
-  # Manual even after merge — protect the `prod` environment in GitLab
-  # (Settings > CI/CD > Protected environments) to restrict who can click it.
   when: manual
   rules:
     - if: $CI_COMMIT_BRANCH == "prod"
 
-calculate-version:
-  extends: .version
+# ============================================================
+# DEV - Version Calculation
+# ============================================================
 
-
-git-tag-dev:
-  extends: .git-tag
-  stage: release
+version:calculate:dev:
+  extends: .version:calculate
   variables:
-    GIT_TAG_PREFIX: "dev-"
-  needs:
-    - job: calculate-version
-      artifacts: true
-    - job: terraform:dev:apply
+    VERSION_PREFIX: "dev-"
   rules:
     - if: $CI_COMMIT_BRANCH == "dev"
 
-git-tag:
-  extends: .git-tag
-  stage: release
+# ============================================================
+# PROD - Version Calculation
+# ============================================================
+
+version:calculate:prod:
+  extends: .version:calculate
+  variables:
+    VERSION_PREFIX: "prod-"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "prod"
+
+# ============================================================
+# DEV - Git Tag Creation
+# ============================================================
+
+version:tag:dev:
+  extends: .version:tag
   needs:
-    - job: calculate-version
+    - job: version:calculate:dev
+      artifacts: true
+    - job: terraform:dev:apply
+      artifacts: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+# ============================================================
+# PROD - Git Tag Creation
+# ============================================================
+
+version:tag:prod:
+  extends: .version:tag
+  needs:
+    - job: version:calculate:prod
       artifacts: true
     - job: terraform:prod:apply
+      artifacts: false
   rules:
     - if: $CI_COMMIT_BRANCH == "prod"
