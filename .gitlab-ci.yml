@@ -7,6 +7,7 @@ stages:
   - secret-detection
   - validate
   - deploy
+  - -release
 
 variables:
   # Run Secret Detection in MR pipelines as well as branch pipelines.
