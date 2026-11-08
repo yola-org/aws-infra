@@ -65,7 +65,8 @@ module "service_role" {
   cognito_user_pool_arn = module.cognito.user_pool_arn
 }
 
-# Dev image optimizer Lambda.
+# Dev image optimizer Lambda. It is published as an immutable version and the
+# SQS queue consumes the "live" alias (see modules/image_optimizer_lambda).
 module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
