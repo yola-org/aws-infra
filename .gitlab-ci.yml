@@ -220,6 +220,23 @@ version-calculate-prod:
 # ============================================================
 # Git Tag Creation
 # ============================================================
+
+version-tag-dev:
+  extends: .version:tag
+
+  needs:
+    - job: version-calculate-dev
+      artifacts: true
+    - job: terraform-apply-dev
+      artifacts: false
+
+  rules:
+    - if: '$VERSION_SKIP == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      changes:
+        - '**/*.tf'
+
 version-tag-prod:
   extends: .version:tag
 
