@@ -15,6 +15,10 @@ resource "aws_lambda_function" "this" {
   package_type  = "Image"
   image_uri     = var.image_uri
 
+  # Every code/config change creates an immutable version. The "live" alias
+  # below points at the version the SQS event source mapping invokes.
+  publish = true
+
   timeout     = var.timeout_seconds
   memory_size = var.memory_size
 
@@ -42,11 +46,20 @@ resource "aws_lambda_function" "this" {
   depends_on = [aws_cloudwatch_log_group.lambda]
 }
 
+resource "aws_lambda_alias" "live" {
+  count = local.enabled ? 1 : 0
+
+  name             = "live"
+  description      = "Version currently consumed by the SQS event source mapping."
+  function_name    = aws_lambda_function.this[0].function_name
+  function_version = aws_lambda_function.this[0].version
+}
+
 resource "aws_lambda_event_source_mapping" "sqs" {
   count = local.enabled ? 1 : 0
 
   event_source_arn                   = var.queue_arn
-  function_name                      = aws_lambda_function.this[0].arn
+  function_name                      = aws_lambda_alias.live[0].arn
   batch_size                         = var.batch_size
   maximum_batching_window_in_seconds = 5
   enabled                            = true

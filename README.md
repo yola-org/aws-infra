@@ -249,6 +249,24 @@ you pass an image URI:
 3. Set `image_optimizer_image_uri` (CI variable `TF_VAR_image_optimizer_image_uri`,
    or untracked `terraform.tfvars`) and re-apply.
 
+### Releases: versions + `live` alias (blue-green flip)
+
+The function is published (`publish = true`), so every image/config change creates
+an immutable Lambda version. The SQS event source mapping does **not** invoke
+`$LATEST`; it invokes the **`live` alias**, which points at the current version:
+
+- `terraform apply` with a new image: new version published → alias moved → SQS
+  starts delivering to the new version.
+- Rollback = move `live` back to the previous version (alias update in place, a
+  few seconds). Messages buffered in SQS are not lost.
+- In-flight batches finish on the version they started on; new batches use the alias.
+- `module.image_optimizer.lambda_version` / `lambda_alias_arn` expose the current
+  version and alias for CI and dashboards; CloudWatch also records the alias as a
+  metric dimension so blue (old) vs green (new) error rates can be compared.
+
+Published versions are never deleted automatically — prune old ones once no alias
+points at them.
+
 The Lambda receives SQS messages, downloads source images from the bucket's
 `listings/` / `users/` prefixes, optimizes them, stamps the watermark
 (`WATERMARK_TEXT`, default `VESTIO`), and writes results back. Configuration is
