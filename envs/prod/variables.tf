@@ -125,26 +125,6 @@ variable "backend_environment" {
   default     = {}
 }
 
-variable "backend_secret_keys" {
-  description = <<-EOT
-    Backend container environment-variable name => unprefixed Secrets Manager key.
-    The environment prefix (secret_name_prefix) is added to each value automatically.
-    Cognito keys plus the assets bucket and image-optimization queue settings
-    are registered by default.
-  EOT
-  type        = map(string)
-  default = {
-    S3_ASSETS_BUCKET                 = "S3/ASSETS_BUCKET_NAME"
-    SQS_IMAGE_OPTIMIZATION_QUEUE_URL = "SQS/IMAGE_OPTIMIZATION_QUEUE_URL"
-    COGNITO_CLIENT_ID                = "COGNITO/CLIENT_ID"
-    COGNITO_CLIENT_SECRET            = "COGNITO/CLIENT_SECRET"
-    COGNITO_ISSUER_URI               = "COGNITO/ISSUER_URI"
-    COGNITO_JWK_SET_URI              = "COGNITO/JWK_SET_URI"
-    COGNITO_REGION                   = "COGNITO/REGION"
-    COGNITO_USER_POOL_ID             = "COGNITO/USER_POOL_ID"
-  }
-}
-
 # --- Shared ECR repositories (manually managed) ---------------------------
 
 variable "backend_ecr_repository_uri" {

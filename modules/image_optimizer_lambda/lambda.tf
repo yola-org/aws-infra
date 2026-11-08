@@ -23,14 +23,20 @@ resource "aws_lambda_function" "this" {
   }
 
   environment {
-    variables = {
-      BUCKET_NAME     = var.bucket_name
-      STATIC_PREFIX   = "static/"
-      LISTINGS_PREFIX = "listings/"
-      USERS_PREFIX    = "users/"
-      SQS_QUEUE_URL   = var.queue_url
-      WATERMARK_TEXT  = var.watermark_text
-    }
+    variables = merge(
+      var.environment_variables,
+      {
+        BUCKET_NAME     = var.bucket_name
+        STATIC_PREFIX   = "static/"
+        LISTINGS_PREFIX = "listings/"
+        USERS_PREFIX    = "users/"
+        SQS_QUEUE_URL   = var.queue_url
+        WATERMARK_TEXT  = var.watermark_text
+      },
+      length(var.secret_names) > 0 ? {
+        APP_SECRET_NAMES = jsonencode(var.secret_names)
+      } : {},
+    )
   }
 
   depends_on = [aws_cloudwatch_log_group.lambda]
