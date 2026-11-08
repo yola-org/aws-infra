@@ -241,6 +241,9 @@ version-tag-dev:
     - if: '$VERSION_SKIP == "true"'
       when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
+      changes:
+        - '**.tf'
+        - '**.tfvars'
 
 version-tag-prod:
   extends: .version:tag
@@ -256,3 +259,6 @@ version-tag-prod:
     - if: '$VERSION_SKIP == "true"'
       when: never
     - if: '$CI_COMMIT_BRANCH == "prod"'
+      changes:
+        - '**.tf'
+        - '**.tfvars'
