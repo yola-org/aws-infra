@@ -236,6 +236,7 @@ version-tag-dev:
     - if: '$CI_COMMIT_BRANCH == "dev"'
       changes:
         - '**/*.tf'
+        - '**/*.tfvars'
 
 version-tag-prod:
   extends: .version:tag
@@ -252,3 +253,4 @@ version-tag-prod:
     - if: '$CI_COMMIT_BRANCH == "prod"'
       changes:
         - '**/*.tf'
+        - '**/*.tfvars'
