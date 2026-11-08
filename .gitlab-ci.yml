@@ -222,11 +222,14 @@ version-calculate-prod:
 # Git Tag Creation
 # ============================================================
 
-# The apply job is the gate: if the apply succeeded, the tag is created.
-# Do NOT add `rules:changes` here. `changes` only compares the pipeline commit
-# with the previous commit on the branch, so a merge that only bumps
-# `terraform.tfvars` (the image tag) can be silently skipped. It also skips
-# every CI-only push, which is why the tag appeared "not triggered".
+# The apply job is the gate: a tag is only created after the apply succeeded.
+# It is additionally scoped to infrastructure changes: docs/CI-only pushes do
+# not create a release tag.
+#
+# Use `**/*.tf`, not `**.tf`: GitLab matches these patterns with Ruby
+# File.fnmatch(FNM_PATHNAME), where `**.tf` only matches files in the repository
+# root. All Terraform files here live under envs/ and modules/, so `**.tf`
+# silently skipped every tag.
 version-tag-dev:
   extends: .version:tag
   stage: release
@@ -242,8 +245,8 @@ version-tag-dev:
       when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
       changes:
-        - '**.tf'
-        - '**.tfvars'
+        - "**/*.tf"
+        - "**/*.tfvars"
 
 version-tag-prod:
   extends: .version:tag
@@ -260,5 +263,5 @@ version-tag-prod:
       when: never
     - if: '$CI_COMMIT_BRANCH == "prod"'
       changes:
-        - '**.tf'
-        - '**.tfvars'
+        - "**/*.tf"
+        - "**/*.tfvars"
