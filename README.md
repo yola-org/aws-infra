@@ -11,6 +11,7 @@ modules/
   registry/                ECR repositories (scan-on-push, lifecycle policies)
   image_optimizer_lambda/  container-image Lambda + IAM + SQS event source mapping
   cognito/                 user pool + app client + per-value Secrets Manager entries (PROD_/DEV_ prefixed)
+  app_config/              shared env-var => secret map, app secrets, IAM read ARNs (backend + Lambda)
   service_role/            EC2 service role + instance profile (S3, SQS, prefixed secret read, Cognito admin)
   backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data (fetches secrets at boot)
 envs/
@@ -157,7 +158,7 @@ JWT validation for all other endpoints uses only the public JWKS — no credenti
 
 ### Config is stored in Secrets Manager — one string secret per value
 
-No JSON blobs. Each env creates eight Secrets Manager **string secrets**. The name
+No JSON blobs. Each env creates nine Secrets Manager **string secrets**. The name
 is `<PREFIX><SECRET_KEY>`, where the prefix is `PROD/` for prod and `DEV/`
 for dev:
 
@@ -171,17 +172,26 @@ for dev:
 | `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
 | `PROD/S3/ASSETS_BUCKET_NAME` / `DEV/S3/ASSETS_BUCKET_NAME` | `S3_ASSETS_BUCKET` | — |
 | `PROD/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` / `DEV/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` | `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` | — |
+| `PROD/PRIMARY_JDBC_URL` / `DEV/PRIMARY_JDBC_URL` | `PRIMARY_JDBC_URL` | `spring.datasource.url` |
 
-The backend launch template receives only the **secret names** and their target
-container environment-variable names (an explicit allowlist built from
-`backend_secret_keys`). At boot, user-data calls `secretsmanager:GetSecretValue`
-for each one through the instance profile, writes the configured environment
-variable names to `/etc/vestio-backend.env` (mode `600`), and starts the container with
+`PRIMARY_JDBC_URL` is created **without a Terraform-managed version**: set its value
+manually in Secrets Manager. It is never written to Terraform, tfvars, or CI variables.
+
+The canonical env-var => secret-key map lives once in `modules/app_config`
+(`secret_keys`), not in each environment root. It drives three things:
+
+1. the backend launch template (secret names and target container env var names),
+2. the backend/Lambda IAM read allowlist, and
+3. the Lambda's `APP_SECRET_NAMES` map.
+
+At boot, user-data calls `secretsmanager:GetSecretValue` for each allowlisted
+secret through the instance profile, writes the configured environment variable
+names to `/etc/vestio-backend.env` (mode `600`), and starts the container with
 `docker run --env-file`. Secret values never appear in Terraform, the launch
 template, tfvars, CI variables, `docker run` arguments, or cloud-init logs.
 
 The instance role is granted `secretsmanager:GetSecretValue` +
-`DescribeSecret` on exactly those eight ARNs — **no `ListSecrets`** permission.
+`DescribeSecret` on exactly those nine ARNs — **no `ListSecrets`** permission.
 
 Both prod and dev deployments get the unprefixed env vars from the launch
 template; the app never calls Secrets Manager on those servers. Local
@@ -207,7 +217,7 @@ cognito:
   user-pool-id:   ${COGNITO_USER_POOL_ID}
 ```
 
-Dev's six secrets and IAM permissions are created, but dev runs no servers yet.
+Dev's six Cognito secrets (plus the app secrets above) and IAM permissions are created, but dev runs no servers yet.
 Outputs: `cognito_user_pool_id`, `cognito_client_id`, `cognito_issuer_uri`,
 `cognito_jwks_uri`, `cognito_secret_names`, `cognito_secret_arns`.
 
@@ -215,7 +225,7 @@ Notes:
 - Run locally: `./gradlew bootRun` — the `local` profile resolves the six
   `DEV_*` secrets automatically into `COGNITO_*` via
   `LocalCognitoSecretsEnvironmentPostProcessor`. Your AWS identity needs
-  `secretsmanager:GetSecretValue` on those six secrets, plus the pool's
+  `secretsmanager:GetSecretValue` on those six Cognito secrets, plus the pool's
   `AdminCreateUser`/`AdminSetUserPassword` for the seeded-users sync. Exported
   `COGNITO_*` values take precedence. Dev servers use the launch template, like
   prod.
@@ -243,7 +253,15 @@ The Lambda receives SQS messages, downloads source images from the bucket's
 `listings/` / `users/` prefixes, optimizes them, stamps the watermark
 (`WATERMARK_TEXT`, default `VESTIO`), and writes results back. Configuration is
 passed via env vars: `BUCKET_NAME`, `STATIC_PREFIX`, `LISTINGS_PREFIX`,
-`USERS_PREFIX`, `SQS_QUEUE_URL`, `WATERMARK_TEXT`.
+`USERS_PREFIX`, `SQS_QUEUE_URL`, `WATERMARK_TEXT`, plus the backend-compatible
+`S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` values.
+
+The Lambda also receives the same `app_config` secret map the backend uses, as
+JSON in `APP_SECRET_NAMES` (`{"ENV_NAME":"PREFIX/SECRET/KEY", ...}`), and its role
+is granted `secretsmanager:GetSecretValue` + `DescribeSecret` on exactly those
+ARNs. Because Lambda has no boot hook, the image resolves those secret names at
+runtime (cold start) instead of Terraform injecting the values. This includes
+the manually-managed `PRIMARY_JDBC_URL`.
 
 ## vestio-backend ASG (prod only)
 
@@ -258,14 +276,14 @@ logging to `/var/log/vestio-backend`.
 - **HTTPS:** set `acm_certificate_arn` to enable the 443 listener and redirect 80→443.
 - **Secrets:** `backend_environment` is for non-secret values only. Runtime
   secrets are fetched from Secrets Manager at boot (see the Cognito section
-  above). Register what gets injected with `backend_secret_keys` (defined in
-  both env roots) as `CONTAINER_ENV_NAME = "SECRET_KEY"` — the six Cognito
-  mappings plus `S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` are
-  already there. The environment prefix is added to each secret
-  key automatically, and the same map drives both the launch template and the
-  instance-role read permissions. Dev has no ASG yet, so there it currently
-  drives IAM only. Never
-  add secret values to tfvars, CI variables, or the launch template.
+  above). The canonical `CONTAINER_ENV_NAME = "SECRET_KEY"` map lives once in
+  `modules/app_config` (`secret_keys`) — the six Cognito mappings plus
+  `S3_ASSETS_BUCKET`, `SQS_IMAGE_OPTIMIZATION_QUEUE_URL`, and
+  `PRIMARY_JDBC_URL` are already there. The environment prefix is added to each
+  secret key automatically, and the same map drives the launch template, the
+  instance-role read permissions, and the Lambda. Dev has no ASG yet, so there
+  it drives IAM only. Never add secret values to tfvars, CI variables, or the
+  launch template.
 
 ## Folder placeholders
 

@@ -76,3 +76,25 @@ variable "queue_arn" {
   description = "ARN of the SQS queue used for the event source mapping and IAM policy."
   type        = string
 }
+
+variable "environment_variables" {
+  description = "Additional non-secret environment variables for the function."
+  type        = map(string)
+  default     = {}
+}
+
+variable "secret_names" {
+  description = <<-EOT
+    Map of environment-variable name => fully-prefixed Secrets Manager secret name.
+    It is passed to the function as JSON in APP_SECRET_NAMES so the function can
+    resolve the values at runtime through its IAM role.
+  EOT
+  type        = map(string)
+  default     = {}
+}
+
+variable "secret_read_arns" {
+  description = "Secrets Manager ARNs the function is allowed to read (GET + DESCRIBE)."
+  type        = list(string)
+  default     = []
+}
