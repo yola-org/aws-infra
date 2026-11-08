@@ -7,7 +7,7 @@ stages:
   - secret-detection
   - validate
   - deploy
-  - -release
+  - release
 
 variables:
   # Run Secret Detection in MR pipelines as well as branch pipelines.
@@ -222,8 +222,14 @@ version-calculate-prod:
 # Git Tag Creation
 # ============================================================
 
+# The apply job is the gate: if the apply succeeded, the tag is created.
+# Do NOT add `rules:changes` here. `changes` only compares the pipeline commit
+# with the previous commit on the branch, so a merge that only bumps
+# `terraform.tfvars` (the image tag) can be silently skipped. It also skips
+# every CI-only push, which is why the tag appeared "not triggered".
 version-tag-dev:
   extends: .version:tag
+  stage: release
 
   needs:
     - job: version-calculate-dev
@@ -235,12 +241,10 @@ version-tag-dev:
     - if: '$VERSION_SKIP == "true"'
       when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
-      changes:
-        - '**/*.tf'
-        - '**/*.tfvars'
 
 version-tag-prod:
   extends: .version:tag
+  stage: release
 
   needs:
     - job: version-calculate-prod
@@ -252,6 +256,3 @@ version-tag-prod:
     - if: '$VERSION_SKIP == "true"'
       when: never
     - if: '$CI_COMMIT_BRANCH == "prod"'
-      changes:
-        - '**/*.tf'
-        - '**/*.tfvars'
