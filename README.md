@@ -11,7 +11,7 @@ modules/
   registry/                ECR repositories (scan-on-push, lifecycle policies)
   image_optimizer_lambda/  container-image Lambda + IAM + SQS event source mapping
   cognito/                 user pool + app client + per-value Secrets Manager entries (PROD_/DEV_ prefixed)
-  app_config/              shared env-var => secret map, app secrets, IAM read ARNs (backend + Lambda)
+  app_config/              shared secret maps (created + external), public env, IAM read ARNs (backend)
   service_role/            EC2 service role + instance profile (S3, SQS, prefixed secret read, Cognito admin)
   backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data (fetches secrets at boot)
 envs/
@@ -139,7 +139,7 @@ not IAM — keep `prod` apply manual and protect the `prod` branch/environment
 CI variables (prefer IAM Identity Center short-lived tokens if your plan supports
 them — same variables, no storage of static keys at all).
 
-Optional CI/CD variable: `TF_VAR_image_optimizer_image_uri`.
+`image_optimizer_image_tag` is required (`terraform.tfvars` or `TF_VAR_image_optimizer_image_tag`). Plan fails if it is missing or empty.
 
 ## Cognito (both environments)
 
@@ -156,33 +156,51 @@ needed, SECRET_HASH derived from the client secret), `login` → `AdminInitiateA
 AccessDenied. The app client allows `ALLOW_ADMIN_USER_PASSWORD_AUTH` for the same reason.
 JWT validation for all other endpoints uses only the public JWKS — no credentials.
 
-### Config is stored in Secrets Manager — one string secret per value
+### Config: secrets in Secrets Manager, non-secrets as public env
 
-No JSON blobs. Each env creates nine Secrets Manager **string secrets**. The name
-is `<PREFIX><SECRET_KEY>`, where the prefix is `PROD/` for prod and `DEV/`
-for dev:
+There are two kinds of runtime configuration, with no overlap:
 
-| Secret name (prod / dev) | Container env var | Spring property |
+- **Public env** — non-sensitive identifiers passed to the backend and Lambda as
+  plain environment variables: `S3_ASSETS_BUCKET`,
+  `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` (plus the Lambda's `BUCKET_NAME` /
+  `SQS_QUEUE_URL`). These are not secrets; IAM protects the resources.
+- **Secrets** — values that must stay private, read from Secrets Manager.
+
+Secrets come from two maps in `modules/app_config`, keyed by the container
+environment-variable name:
+
+- `secret_keys` — secrets **created by Terraform** (the six Cognito values).
+- `external_secrets` — secrets that **already exist** in Secrets Manager,
+  supplied per environment (`PRIMARY_JDBC_URL` by default, plus anything else
+  you add). Each one is looked up at plan time, so a missing secret fails the
+  plan instead of booting with an empty value.
+
+The name is `<PREFIX><SECRET_KEY>`, where the prefix is `PROD/` for prod and
+`DEV/` for dev:
+
+| Secret name (prod / dev) | Container env var | Created by |
 |---|---|---|
-| `PROD/COGNITO/CLIENT_ID` / `DEV/COGNITO/CLIENT_ID` | `COGNITO_CLIENT_ID` | `cognito.client-id` |
-| `PROD/COGNITO/CLIENT_SECRET` / `DEV/COGNITO/CLIENT_SECRET` | `COGNITO_CLIENT_SECRET` | `cognito.client-secret` |
-| `PROD/COGNITO/USER_POOL_ID` / `DEV/COGNITO/USER_POOL_ID` | `COGNITO_USER_POOL_ID` | `cognito.user-pool-id` |
-| `PROD/COGNITO/REGION` / `DEV/COGNITO/REGION` | `COGNITO_REGION` | `cognito.region` |
-| `PROD/COGNITO/ISSUER_URI` / `DEV/COGNITO/ISSUER_URI` | `COGNITO_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
-| `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` |
-| `PROD/S3/ASSETS_BUCKET_NAME` / `DEV/S3/ASSETS_BUCKET_NAME` | `S3_ASSETS_BUCKET` | — |
-| `PROD/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` / `DEV/SQS/IMAGE_OPTIMIZATION_QUEUE_URL` | `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` | — |
-| `PROD/PRIMARY_JDBC_URL` / `DEV/PRIMARY_JDBC_URL` | `PRIMARY_JDBC_URL` | `spring.datasource.url` |
+| `PROD/COGNITO/CLIENT_ID` / `DEV/COGNITO/CLIENT_ID` | `COGNITO_CLIENT_ID` | `modules/cognito` |
+| `PROD/COGNITO/CLIENT_SECRET` / `DEV/COGNITO/CLIENT_SECRET` | `COGNITO_CLIENT_SECRET` | `modules/cognito` |
+| `PROD/COGNITO/USER_POOL_ID` / `DEV/COGNITO/USER_POOL_ID` | `COGNITO_USER_POOL_ID` | `modules/cognito` |
+| `PROD/COGNITO/REGION` / `DEV/COGNITO/REGION` | `COGNITO_REGION` | `modules/cognito` |
+| `PROD/COGNITO/ISSUER_URI` / `DEV/COGNITO/ISSUER_URI` | `COGNITO_ISSUER_URI` | `modules/cognito` |
+| `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `modules/cognito` |
+| `PROD/PRIMARY_JDBC_URL` / `DEV/PRIMARY_JDBC_URL` | `PRIMARY_JDBC_URL` | external (pre-existing) |
 
-`PRIMARY_JDBC_URL` is created **without a Terraform-managed version**: set its value
-manually in Secrets Manager. It is never written to Terraform, tfvars, or CI variables.
+`PRIMARY_JDBC_URL` is not created by Terraform. The secret, including its current
+value, must already exist in Secrets Manager (`PROD/PRIMARY_JDBC_URL` or
+`DEV/PRIMARY_JDBC_URL`). Plan fails if the secret is missing or the value is
+empty. The value is read only to perform that check and is not written to state,
+tfvars, or CI variables.
 
-The canonical env-var => secret-key map lives once in `modules/app_config`
-(`secret_keys`), not in each environment root. It drives three things:
+The canonical env-var => secret-key maps live once in `modules/app_config`, not
+in each environment root. They drive two things:
 
 1. the backend launch template (secret names and target container env var names),
-2. the backend/Lambda IAM read allowlist, and
-3. the Lambda's `APP_SECRET_NAMES` map.
+2. the backend IAM read allowlist.
+
+The Lambda receives **no secrets** — only the public environment values.
 
 At boot, user-data calls `secretsmanager:GetSecretValue` for each allowlisted
 secret through the instance profile, writes the configured environment variable
@@ -191,7 +209,7 @@ names to `/etc/vestio-backend.env` (mode `600`), and starts the container with
 template, tfvars, CI variables, `docker run` arguments, or cloud-init logs.
 
 The instance role is granted `secretsmanager:GetSecretValue` +
-`DescribeSecret` on exactly those nine ARNs — **no `ListSecrets`** permission.
+`DescribeSecret` on exactly those ARNs — **no `ListSecrets`** permission.
 
 Both prod and dev deployments get the unprefixed env vars from the launch
 template; the app never calls Secrets Manager on those servers. Local
@@ -237,17 +255,12 @@ Notes:
 - Secret values still live in the Terraform state — keep state in the encrypted,
   locked S3 bucket and never commit it.
 
-## The image-optimizer Lambda is intentionally decoupled
+## The image-optimizer Lambda
 
-The Lambda code repo does **not** exist yet. Neither env creates the function until
-you pass an image URI:
-
-1. `terraform apply` creates everything except the Lambda and its event source
-   mapping (a log group is always created).
-2. Once the image-optimizer repo exists, build & push its Docker image to the
-   `vestio/image-optimizer` (prod) / `vestio/dev-image-optimizer` (dev) ECR repo.
-3. Set `image_optimizer_image_uri` (CI variable `TF_VAR_image_optimizer_image_uri`,
-   or untracked `terraform.tfvars`) and re-apply.
+`image_optimizer_image_tag` has no default. Set it in tfvars (or
+`TF_VAR_image_optimizer_image_tag`) to the tag already pushed to ECR. Plan fails
+when the variable is missing, null, or empty, and the function is always created
+from `<image_optimizer_ecr_repository_uri>:<image_optimizer_image_tag>`.
 
 ### Releases: versions + `live` alias (blue-green flip)
 
@@ -274,12 +287,10 @@ passed via env vars: `BUCKET_NAME`, `STATIC_PREFIX`, `LISTINGS_PREFIX`,
 `USERS_PREFIX`, `SQS_QUEUE_URL`, `WATERMARK_TEXT`, plus the backend-compatible
 `S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` values.
 
-The Lambda also receives the same `app_config` secret map the backend uses, as
-JSON in `APP_SECRET_NAMES` (`{"ENV_NAME":"PREFIX/SECRET/KEY", ...}`), and its role
-is granted `secretsmanager:GetSecretValue` + `DescribeSecret` on exactly those
-ARNs. Because Lambda has no boot hook, the image resolves those secret names at
-runtime (cold start) instead of Terraform injecting the values. This includes
-the manually-managed `PRIMARY_JDBC_URL`.
+The Lambda receives **no secrets**. It gets only the public environment values
+(see the secrets section above), including the backend-compatible
+`S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` names. Its IAM role has
+no `secretsmanager` permissions.
 
 ## vestio-backend ASG (prod only)
 
@@ -292,16 +303,15 @@ logging to `/var/log/vestio-backend`.
   `backend_health_check_matcher = "200-403"` (untracked tfvars or `TF_VAR_*`), or add
   Actuator and point `backend_health_check_path` at `/actuator/health`.
 - **HTTPS:** set `acm_certificate_arn` to enable the 443 listener and redirect 80→443.
-- **Secrets:** `backend_environment` is for non-secret values only. Runtime
-  secrets are fetched from Secrets Manager at boot (see the Cognito section
-  above). The canonical `CONTAINER_ENV_NAME = "SECRET_KEY"` map lives once in
-  `modules/app_config` (`secret_keys`) — the six Cognito mappings plus
-  `S3_ASSETS_BUCKET`, `SQS_IMAGE_OPTIMIZATION_QUEUE_URL`, and
-  `PRIMARY_JDBC_URL` are already there. The environment prefix is added to each
-  secret key automatically, and the same map drives the launch template, the
-  instance-role read permissions, and the Lambda. Dev has no ASG yet, so there
-  it drives IAM only. Never add secret values to tfvars, CI variables, or the
-  launch template.
+- **Secrets:** `backend_environment` is for non-secret values only (it is merged
+  with `public_environment`). Runtime secrets are fetched from Secrets Manager at
+  boot (see the secrets section above). The `CONTAINER_ENV_NAME = "SECRET_KEY"`
+  maps live once in `modules/app_config`: `secret_keys` for Terraform-created
+  secrets and `external_secrets` for pre-existing ones (supplied per environment
+  via tfvars). The environment prefix is added to each secret key automatically,
+  and the same maps drive the launch template and the instance-role read
+  permissions. Dev has no ASG yet, so there they drive IAM only. Never add
+  secret values to tfvars, CI variables, or the launch template.
 
 ## Folder placeholders
 

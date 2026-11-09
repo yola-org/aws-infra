@@ -24,7 +24,7 @@ output "image_optimizer_dlq_url" {
 }
 
 output "image_optimizer_lambda_name" {
-  description = "Name of the image optimizer Lambda (null until image_optimizer_image_uri is set)."
+  description = "Name of the image optimizer Lambda."
   value       = module.image_optimizer.lambda_name
 }
 

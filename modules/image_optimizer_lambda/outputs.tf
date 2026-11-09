@@ -1,31 +1,26 @@
 output "lambda_name" {
-  description = "Name of the function (null when image_uri is not set)."
-  value       = local.enabled ? aws_lambda_function.this[0].function_name : null
+  description = "Name of the function."
+  value       = aws_lambda_function.this.function_name
 }
 
 output "lambda_arn" {
-  description = "ARN of the function (null when image_uri is not set)."
-  value       = local.enabled ? aws_lambda_function.this[0].arn : null
+  description = "ARN of the function."
+  value       = aws_lambda_function.this.arn
 }
 
 output "lambda_version" {
-  description = "Published version the live alias points at (null when image_uri is not set)."
-  value       = local.enabled ? aws_lambda_function.this[0].version : null
+  description = "Published version the live alias points at."
+  value       = aws_lambda_function.this.version
 }
 
 output "lambda_alias_name" {
-  description = "Name of the alias the SQS event source mapping invokes (null when image_uri is not set)."
-  value       = local.enabled ? aws_lambda_alias.live[0].name : null
+  description = "Name of the alias the SQS event source mapping invokes."
+  value       = aws_lambda_alias.live.name
 }
 
 output "lambda_alias_arn" {
-  description = "ARN of the live alias (null when image_uri is not set)."
-  value       = local.enabled ? aws_lambda_alias.live[0].arn : null
-}
-
-output "enabled" {
-  description = "Whether the Lambda and its event source mapping were created."
-  value       = local.enabled
+  description = "ARN of the live alias."
+  value       = aws_lambda_alias.live.arn
 }
 
 output "role_arn" {

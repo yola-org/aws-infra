@@ -1,61 +1,55 @@
 locals {
-  # ARNs of every secret that can be referenced by secret_keys. Cognito owns its
-  # own secrets; the remaining values are managed here.
-  managed_secret_arns = merge(
-    var.cognito_secret_arns,
-    {
-      "S3/ASSETS_BUCKET_NAME"            = aws_secretsmanager_secret.assets_bucket_name.arn
-      "SQS/IMAGE_OPTIMIZATION_QUEUE_URL" = aws_secretsmanager_secret.image_optimization_queue_url.arn
-      "PRIMARY_JDBC_URL"                 = aws_secretsmanager_secret.primary_jdbc_url.arn
-    },
-  )
+  # One merged view: container env-var name => unprefixed Secrets Manager key.
+  # var.secret_keys covers secrets created by Terraform; var.external_secrets
+  # covers secrets that already exist in Secrets Manager.
+  all_secrets = merge(var.secret_keys, var.external_secrets)
 
   # Environment-variable name => fully-prefixed Secrets Manager secret name.
   secret_names = {
-    for env_name, key in var.secret_keys : env_name => "${var.secret_name_prefix}${key}"
+    for env_name, key in local.all_secrets : env_name => "${var.secret_name_prefix}${key}"
   }
 
+  # Secrets not created by Terraform, looked up by name. The lookup is also the
+  # existence check: plan fails if a referenced secret is missing.
+  external_keys = toset(values(var.external_secrets))
+
+  # ARNs for secrets created by this configuration.
+  managed_secret_arns = var.cognito_secret_arns
+
+  all_secret_arns = merge(
+    local.managed_secret_arns,
+    { for key, s in data.aws_secretsmanager_secret.external : key => s.arn },
+  )
+
   # Same allowlist, expressed as ARNs for IAM policies.
-  secret_read_arns = [
-    for key in values(var.secret_keys) : local.managed_secret_arns[key]
-  ]
+  secret_read_arns = [for key in values(local.all_secrets) : local.all_secret_arns[key]]
+}
+
+data "aws_secretsmanager_secret" "external" {
+  for_each = local.external_keys
+  name     = "${var.secret_name_prefix}${each.key}"
+}
+
+check "no_duplicate_env_names" {
+  assert {
+    condition     = length(setintersection(keys(var.secret_keys), keys(var.external_secrets))) == 0
+    error_message = "An environment variable cannot be both Terraform-managed and external."
+  }
 }
 
 check "secret_keys_have_arns" {
   assert {
     condition = alltrue([
-      for key in values(var.secret_keys) : contains(keys(local.managed_secret_arns), key)
+      for key in values(local.all_secrets) : contains(keys(local.all_secret_arns), key)
     ])
-    error_message = "Every secret_keys value must resolve to a Cognito or app_config-managed secret ARN."
+    error_message = "Every secret_keys or external_secrets value must resolve to a Cognito ARN or an existing Secrets Manager secret."
   }
 }
 
-resource "aws_secretsmanager_secret" "assets_bucket_name" {
-  name                    = "${var.secret_name_prefix}S3/ASSETS_BUCKET_NAME"
-  description             = "Assets bucket name for the Vestio backend and image optimizer"
-  recovery_window_in_days = var.secret_recovery_window_in_days
-}
+removed {
+  from = aws_secretsmanager_secret.primary_jdbc_url
 
-resource "aws_secretsmanager_secret_version" "assets_bucket_name" {
-  secret_id     = aws_secretsmanager_secret.assets_bucket_name.id
-  secret_string = var.assets_bucket_name
-}
-
-resource "aws_secretsmanager_secret" "image_optimization_queue_url" {
-  name                    = "${var.secret_name_prefix}SQS/IMAGE_OPTIMIZATION_QUEUE_URL"
-  description             = "Image optimization SQS queue URL for the Vestio backend and image optimizer"
-  recovery_window_in_days = var.secret_recovery_window_in_days
-}
-
-resource "aws_secretsmanager_secret_version" "image_optimization_queue_url" {
-  secret_id     = aws_secretsmanager_secret.image_optimization_queue_url.id
-  secret_string = var.image_optimization_queue_url
-}
-
-# No aws_secretsmanager_secret_version is managed here on purpose: the JDBC URL
-# is set manually in Secrets Manager and must never pass through Terraform.
-resource "aws_secretsmanager_secret" "primary_jdbc_url" {
-  name                    = "${var.secret_name_prefix}PRIMARY_JDBC_URL"
-  description             = "Primary database JDBC URL (value set manually in Secrets Manager)"
-  recovery_window_in_days = var.secret_recovery_window_in_days
+  lifecycle {
+    destroy = false
+  }
 }

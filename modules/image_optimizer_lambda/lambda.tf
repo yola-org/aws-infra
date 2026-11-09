@@ -1,15 +1,9 @@
-locals {
-  enabled = var.image_uri != ""
-}
-
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${var.name}"
   retention_in_days = var.log_retention_in_days
 }
 
 resource "aws_lambda_function" "this" {
-  count = local.enabled ? 1 : 0
-
   function_name = var.name
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
@@ -26,6 +20,8 @@ resource "aws_lambda_function" "this" {
     size = var.ephemeral_storage_mb
   }
 
+  # The function receives non-secret configuration only. Secrets are not passed
+  # to the Lambda; values that must stay private live in the backend's env file.
   environment {
     variables = merge(
       var.environment_variables,
@@ -37,9 +33,6 @@ resource "aws_lambda_function" "this" {
         SQS_QUEUE_URL   = var.queue_url
         WATERMARK_TEXT  = var.watermark_text
       },
-      length(var.secret_names) > 0 ? {
-        APP_SECRET_NAMES = jsonencode(var.secret_names)
-      } : {},
     )
   }
 
@@ -47,19 +40,15 @@ resource "aws_lambda_function" "this" {
 }
 
 resource "aws_lambda_alias" "live" {
-  count = local.enabled ? 1 : 0
-
   name             = "live"
   description      = "Version currently consumed by the SQS event source mapping."
-  function_name    = aws_lambda_function.this[0].function_name
-  function_version = aws_lambda_function.this[0].version
+  function_name    = aws_lambda_function.this.function_name
+  function_version = aws_lambda_function.this.version
 }
 
 resource "aws_lambda_event_source_mapping" "sqs" {
-  count = local.enabled ? 1 : 0
-
   event_source_arn                   = var.queue_arn
-  function_name                      = aws_lambda_alias.live[0].arn
+  function_name                      = aws_lambda_alias.live.arn
   batch_size                         = var.batch_size
   maximum_batching_window_in_seconds = 5
   enabled                            = true
@@ -69,4 +58,19 @@ resource "aws_lambda_event_source_mapping" "sqs" {
   }
 
   function_response_types = ["ReportBatchItemFailures"]
+}
+
+moved {
+  from = aws_lambda_function.this[0]
+  to   = aws_lambda_function.this
+}
+
+moved {
+  from = aws_lambda_alias.live[0]
+  to   = aws_lambda_alias.live
+}
+
+moved {
+  from = aws_lambda_event_source_mapping.sqs[0]
+  to   = aws_lambda_event_source_mapping.sqs
 }

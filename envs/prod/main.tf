@@ -3,6 +3,7 @@
 # value using the explicitly configured container environment-variable name.
 locals {
   backend_environment = merge(
+    module.app_config.public_environment,
     {
       AWS_REGION  = var.aws_region
       BUCKET_NAME = module.storage.bucket
@@ -38,33 +39,11 @@ module "cognito" {
 module "app_config" {
   source = "../../modules/app_config"
 
-  secret_name_prefix             = var.secret_name_prefix
-  cognito_secret_arns            = module.cognito.secret_arns
-  assets_bucket_name             = module.storage.bucket
-  image_optimization_queue_url   = module.queue.queue_url
-  secret_recovery_window_in_days = 7
-}
-
-# Preserve the existing secrets while moving their addresses into app_config.
-# These can be removed after the next apply.
-moved {
-  from = aws_secretsmanager_secret.assets_bucket_name
-  to   = module.app_config.aws_secretsmanager_secret.assets_bucket_name
-}
-
-moved {
-  from = aws_secretsmanager_secret_version.assets_bucket_name
-  to   = module.app_config.aws_secretsmanager_secret_version.assets_bucket_name
-}
-
-moved {
-  from = aws_secretsmanager_secret.image_optimization_queue_url
-  to   = module.app_config.aws_secretsmanager_secret.image_optimization_queue_url
-}
-
-moved {
-  from = aws_secretsmanager_secret_version.image_optimization_queue_url
-  to   = module.app_config.aws_secretsmanager_secret_version.image_optimization_queue_url
+  secret_name_prefix           = var.secret_name_prefix
+  cognito_secret_arns          = module.cognito.secret_arns
+  external_secrets             = var.external_secrets
+  assets_bucket_name           = module.storage.bucket
+  image_optimization_queue_url = module.queue.queue_url
 }
 
 # EC2 service role for this environment (S3, SQS, Cognito secret read, Cognito
@@ -83,15 +62,13 @@ module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
   name                  = var.image_optimizer_lambda_name
-  image_uri             = var.image_optimizer_image_tag == "" ? "" : "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
+  image_uri             = "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
   bucket_name           = module.storage.bucket
   bucket_arn            = module.storage.bucket_arn
   queue_url             = module.queue.queue_url
   queue_arn             = module.queue.queue_arn
   watermark_text        = var.watermark_text
   environment_variables = module.app_config.public_environment
-  secret_names          = module.app_config.secret_names
-  secret_read_arns      = module.app_config.secret_read_arns
 }
 
 module "backend" {

@@ -41,9 +41,14 @@ variable "image_optimizer_lambda_name" {
 }
 
 variable "image_optimizer_image_tag" {
-  description = "Tag of the image-optimizer image to deploy. Empty = Lambda not created yet."
+  description = "Tag of the image-optimizer image to deploy. Required in tfvars; plan fails if it is missing or empty."
   type        = string
-  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(trimspace(var.image_optimizer_image_tag)) > 0
+    error_message = "image_optimizer_image_tag must be set in tfvars to a non-empty image tag."
+  }
 }
 
 variable "watermark_text" {
@@ -64,6 +69,22 @@ variable "secret_name_prefix" {
   type        = string
   default     = "PROD/"
 }
+
+variable "external_secrets" {
+  description = <<-EOT
+    Secrets that already exist in Secrets Manager, keyed by container
+    environment-variable name. Values are unprefixed secret keys; the
+    secret_name_prefix is added automatically.
+
+    Terraform-created secrets (Cognito) are defined in modules/app_config.
+    PRIMARY_JDBC_URL must exist before apply or the plan fails.
+  EOT
+  type        = map(string)
+  default = {
+    PRIMARY_JDBC_URL = "PRIMARY_JDBC_URL"
+  }
+}
+
 # --- vestio-backend ALB + ASG ----------------------------------------------
 variable "backend_instance_type" {
   description = "EC2 instance type for vestio-backend instances."

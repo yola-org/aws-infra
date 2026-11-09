@@ -4,15 +4,14 @@ variable "name" {
 }
 
 variable "image_uri" {
-  description = <<-EOT
-    Full ECR image URI (including tag) for the function, e.g.
-    123456789012.dkr.ecr.ca-central-1.amazonaws.com/vestio/image-optimizer:latest
-
-    Leave empty (default) to skip creating the Lambda and its event source mapping.
-    The Lambda code repo does not exist yet; once it does, push the image and set this.
-  EOT
+  description = "Full ECR image URI (including tag) for the function. Required; plan fails if it is missing or empty."
   type        = string
-  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(trimspace(var.image_uri)) > 0
+    error_message = "image_uri must be a non-empty ECR image URI, including the tag."
+  }
 }
 
 variable "timeout_seconds" {
@@ -81,20 +80,4 @@ variable "environment_variables" {
   description = "Additional non-secret environment variables for the function."
   type        = map(string)
   default     = {}
-}
-
-variable "secret_names" {
-  description = <<-EOT
-    Map of environment-variable name => fully-prefixed Secrets Manager secret name.
-    It is passed to the function as JSON in APP_SECRET_NAMES so the function can
-    resolve the values at runtime through its IAM role.
-  EOT
-  type        = map(string)
-  default     = {}
-}
-
-variable "secret_read_arns" {
-  description = "Secrets Manager ARNs the function is allowed to read (GET + DESCRIBE)."
-  type        = list(string)
-  default     = []
 }
