@@ -3,6 +3,17 @@ variable "name" {
   type        = string
 }
 
+variable "deployment_environment" {
+  description = "Deployment environment exposed to the Lambda as APP_ENV."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = contains(["dev", "prod"], var.deployment_environment)
+    error_message = "deployment_environment must be dev or prod."
+  }
+}
+
 variable "image_uri" {
   description = "Full ECR image URI (including tag) for the function. Required; plan fails if it is missing or empty."
   type        = string

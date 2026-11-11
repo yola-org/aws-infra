@@ -1,0 +1,225 @@
+# Terraform pipeline.
+#
+# Shared logic lives in yola-org/ci-templates:
+#   - reusable-terraform-plan.yml  -> plan + saved plan artifact
+#   - reusable-terraform-apply.yml -> apply, gated by a GitHub environment
+#   - reusable-version.yml         -> dev-/prod- version streams
+#
+# Cloud credentials are only requested by the plan/apply jobs, never by
+# validation or pull-request runs.
+
+name: Terraform
+
+on:
+  push:
+    branches: [dev, prod, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # push release tags
+  id-token: write # AWS OIDC
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ca-central-1' }}
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+      - name: Validate every environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in envs/*; do
+            echo "::group::${dir}"
+            (
+              cd "$dir"
+              terraform init -backend=false -input=false
+              terraform validate
+            )
+            echo "::endgroup::"
+          done
+
+  changes:
+    name: Detect Terraform changes
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.filter.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: Filter changed paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] ||
+            [ "$BASE" = "0000000000000000000000000000000000000000" ] ||
+            ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+
+          CHANGED="$(git diff --name-only "$BASE" "${{ github.sha }}")"
+          echo "$CHANGED" | sed 's/^/  /'
+
+          if echo "$CHANGED" | grep -Eq '(\.tf$|\.tfvars$)'; then
+            echo "terraform=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "terraform=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # dev: plan and apply automatically, then tag when Terraform changed.
+  # ---------------------------------------------------------------------------
+
+  plan-dev:
+    name: Plan dev
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: validate
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-plan.yml@main
+    with:
+      working-directory: envs/dev
+      artifact-name: tfplan-dev
+      aws-region: ${{ vars.AWS_REGION || 'ca-central-1' }}
+    secrets: inherit
+
+  apply-dev:
+    name: Apply dev
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: plan-dev
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-apply.yml@main
+    with:
+      working-directory: envs/dev
+      artifact-name: tfplan-dev
+      environment: dev
+      aws-region: ${{ vars.AWS_REGION || 'ca-central-1' }}
+    secrets: inherit
+
+  version-dev:
+    name: Calculate dev version
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    uses: yola-org/ci-templates/.github/workflows/reusable-version.yml@main
+    with:
+      prefix: dev-
+      tag: false
+      commit-message: ${{ github.event.head_commit.message }}
+    secrets: inherit
+
+  tag-dev:
+    name: Tag dev release
+    needs: [changes, apply-dev, version-dev]
+    if: >-
+      always() &&
+      needs.changes.outputs.terraform == 'true' &&
+      needs.apply-dev.result == 'success' &&
+      needs.version-dev.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Create and push tag
+        uses: yola-org/ci-templates/.github/actions/version-tag@main
+        with:
+          version: ${{ needs.version-dev.outputs.version }}
+          git-tag: ${{ needs.version-dev.outputs.git_tag }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # prod: plan automatically, apply only after the `prod` environment approves,
+  # then tag when Terraform changed.
+  # ---------------------------------------------------------------------------
+
+  plan-prod:
+    name: Plan prod
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/prod' }}
+    needs: validate
+    concurrency:
+      group: terraform-prod
+      cancel-in-progress: false
+    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-plan.yml@main
+    with:
+      working-directory: envs/prod
+      artifact-name: tfplan-prod
+      aws-region: ${{ vars.AWS_REGION || 'ca-central-1' }}
+      # Guarded: an unset variable must not override envs/prod/terraform.tfvars
+      # (or fail the plan with an empty value).
+      env-vars: ${{ vars.IMAGE_OPTIMIZER_IMAGE_TAG != '' && format('TF_VAR_image_optimizer_image_tag={0}', vars.IMAGE_OPTIMIZER_IMAGE_TAG) || '' }}
+    secrets: inherit
+
+  apply-prod:
+    name: Apply prod
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/prod' }}
+    needs: plan-prod
+    concurrency:
+      group: terraform-prod
+      cancel-in-progress: false
+    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-apply.yml@main
+    with:
+      working-directory: envs/prod
+      artifact-name: tfplan-prod
+      environment: prod
+      aws-region: ${{ vars.AWS_REGION || 'ca-central-1' }}
+      env-vars: ${{ vars.IMAGE_OPTIMIZER_IMAGE_TAG != '' && format('TF_VAR_image_optimizer_image_tag={0}', vars.IMAGE_OPTIMIZER_IMAGE_TAG) || '' }}
+    secrets: inherit
+
+  version-prod:
+    name: Calculate prod version
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/prod' }}
+    uses: yola-org/ci-templates/.github/workflows/reusable-version.yml@main
+    with:
+      prefix: prod-
+      tag: false
+      commit-message: ${{ github.event.head_commit.message }}
+    secrets: inherit
+
+  tag-prod:
+    name: Tag prod release
+    needs: [changes, apply-prod, version-prod]
+    if: >-
+      always() &&
+      needs.changes.outputs.terraform == 'true' &&
+      needs.apply-prod.result == 'success' &&
+      needs.version-prod.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Create and push tag
+        uses: yola-org/ci-templates/.github/actions/version-tag@main
+        with:
+          version: ${{ needs.version-prod.outputs.version }}
+          git-tag: ${{ needs.version-prod.outputs.git_tag }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}

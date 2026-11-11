@@ -26,6 +26,7 @@ resource "aws_lambda_function" "this" {
     variables = merge(
       var.environment_variables,
       {
+        APP_ENV         = var.deployment_environment
         BUCKET_NAME     = var.bucket_name
         STATIC_PREFIX   = "static/"
         LISTINGS_PREFIX = "listings/"

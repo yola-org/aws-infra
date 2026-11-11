@@ -61,14 +61,15 @@ module "service_role" {
 module "image_optimizer" {
   source = "../../modules/image_optimizer_lambda"
 
-  name                  = var.image_optimizer_lambda_name
-  image_uri             = "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
-  bucket_name           = module.storage.bucket
-  bucket_arn            = module.storage.bucket_arn
-  queue_url             = module.queue.queue_url
-  queue_arn             = module.queue.queue_arn
-  watermark_text        = var.watermark_text
-  environment_variables = module.app_config.public_environment
+  name                   = var.image_optimizer_lambda_name
+  deployment_environment = "prod"
+  image_uri              = "${var.image_optimizer_ecr_repository_uri}:${var.image_optimizer_image_tag}"
+  bucket_name            = module.storage.bucket
+  bucket_arn             = module.storage.bucket_arn
+  queue_url              = module.queue.queue_url
+  queue_arn              = module.queue.queue_arn
+  watermark_text         = var.watermark_text
+  environment_variables  = module.app_config.public_environment
 }
 
 module "backend" {
