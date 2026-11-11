@@ -1,6 +1,6 @@
 # Terraform pipeline.
 #
-# Shared logic lives in yola-org/ci-templates:
+# Shared logic lives in yola-org/shared-templates:
 #   - reusable-terraform-plan.yml  -> plan + saved plan artifact
 #   - reusable-terraform-apply.yml -> apply, gated by a GitHub environment
 #   - reusable-version.yml         -> dev-/prod- version streams
@@ -94,7 +94,7 @@ jobs:
     concurrency:
       group: terraform-dev
       cancel-in-progress: false
-    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-plan.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-terraform-plan.yml@main
     with:
       working-directory: envs/dev
       artifact-name: tfplan-dev
@@ -108,7 +108,7 @@ jobs:
     concurrency:
       group: terraform-dev
       cancel-in-progress: false
-    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-apply.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-terraform-apply.yml@main
     with:
       working-directory: envs/dev
       artifact-name: tfplan-dev
@@ -119,7 +119,7 @@ jobs:
   version-dev:
     name: Calculate dev version
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-    uses: yola-org/ci-templates/.github/workflows/reusable-version.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-version.yml@main
     with:
       prefix: dev-
       tag: false
@@ -145,7 +145,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - name: Create and push tag
-        uses: yola-org/ci-templates/.github/actions/version-tag@main
+        uses: yola-org/shared-templates/.github/actions/version-tag@main
         with:
           version: ${{ needs.version-dev.outputs.version }}
           git-tag: ${{ needs.version-dev.outputs.git_tag }}
@@ -163,7 +163,7 @@ jobs:
     concurrency:
       group: terraform-prod
       cancel-in-progress: false
-    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-plan.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-terraform-plan.yml@main
     with:
       working-directory: envs/prod
       artifact-name: tfplan-prod
@@ -180,7 +180,7 @@ jobs:
     concurrency:
       group: terraform-prod
       cancel-in-progress: false
-    uses: yola-org/ci-templates/.github/workflows/reusable-terraform-apply.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-terraform-apply.yml@main
     with:
       working-directory: envs/prod
       artifact-name: tfplan-prod
@@ -192,7 +192,7 @@ jobs:
   version-prod:
     name: Calculate prod version
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/prod' }}
-    uses: yola-org/ci-templates/.github/workflows/reusable-version.yml@main
+    uses: yola-org/shared-templates/.github/workflows/reusable-version.yml@main
     with:
       prefix: prod-
       tag: false
@@ -218,7 +218,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - name: Create and push tag
-        uses: yola-org/ci-templates/.github/actions/version-tag@main
+        uses: yola-org/shared-templates/.github/actions/version-tag@main
         with:
           version: ${{ needs.version-prod.outputs.version }}
           git-tag: ${{ needs.version-prod.outputs.git_tag }}
