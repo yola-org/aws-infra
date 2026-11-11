@@ -119,6 +119,7 @@ jobs:
   version-dev:
     name: Calculate dev version
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: apply-dev
     uses: yola-org/shared-workflows/.github/workflows/reusable-version.yml@main
     with:
       prefix: dev-
