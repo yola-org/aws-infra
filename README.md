@@ -278,7 +278,7 @@ an immutable Lambda version. The SQS event source mapping does **not** invoke
 Published versions are never deleted automatically — prune old ones once no alias
 points at them.
 
-The Lambda consumes listing image events from SQS, writes WebP renditions to S3, and updates the asset filenames and listing status in PostgreSQL. The backend's Liquibase migration for `listing_asset_keys.optimized_name` must be in place before deploying this Lambda image.
+The Lambda consumes listing image events from SQS, writes WebP renditions to S3, and updates listing status in PostgreSQL once the renditions are ready.
 
 The existing Lambda execution role has `secretsmanager:GetSecretValue` on its environment's JDBC secret. For a customer-managed KMS key, it also gets `kms:Decrypt` on that key, scoped to the secret's encryption context. The KMS key policy must allow the role to use this grant. The Lambda must be able to reach the PostgreSQL endpoint from its runtime network.
 
