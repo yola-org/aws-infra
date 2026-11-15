@@ -20,3 +20,11 @@ output "public_environment" {
     SQS_IMAGE_OPTIMIZATION_QUEUE_URL = var.image_optimization_queue_url
   }
 }
+
+output "primary_jdbc_secret" {
+  description = "Metadata for the external secret backing PRIMARY_JDBC_URL."
+  value = {
+    arn        = data.aws_secretsmanager_secret.external[local.all_secrets.PRIMARY_JDBC_URL].arn
+    kms_key_id = data.aws_secretsmanager_secret.external[local.all_secrets.PRIMARY_JDBC_URL].kms_key_id
+  }
+}

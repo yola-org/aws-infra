@@ -92,3 +92,11 @@ variable "environment_variables" {
   type        = map(string)
   default     = {}
 }
+
+variable "primary_jdbc_secret" {
+  description = "ARN and optional customer-managed key ID of the environment's PRIMARY_JDBC_URL secret."
+  type = object({
+    arn        = string
+    kms_key_id = string
+  })
+}

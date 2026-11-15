@@ -20,24 +20,24 @@ resource "aws_lambda_function" "this" {
     size = var.ephemeral_storage_mb
   }
 
-  # The function receives non-secret configuration only. Secrets are not passed
-  # to the Lambda; values that must stay private live in the backend's env file.
+  # The Lambda fetches the JDBC secret value at runtime using this ARN.
   environment {
     variables = merge(
       var.environment_variables,
       {
-        APP_ENV         = var.deployment_environment
-        BUCKET_NAME     = var.bucket_name
-        STATIC_PREFIX   = "static/"
-        LISTINGS_PREFIX = "listings/"
-        USERS_PREFIX    = "users/"
-        SQS_QUEUE_URL   = var.queue_url
-        WATERMARK_TEXT  = var.watermark_text
+        APP_ENV                 = var.deployment_environment
+        BUCKET_NAME             = var.bucket_name
+        STATIC_PREFIX           = "static/"
+        LISTINGS_PREFIX         = "listings/"
+        USERS_PREFIX            = "users/"
+        SQS_QUEUE_URL           = var.queue_url
+        WATERMARK_TEXT          = var.watermark_text
+        PRIMARY_JDBC_SECRET_ARN = var.primary_jdbc_secret.arn
       },
     )
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda]
+  depends_on = [aws_cloudwatch_log_group.lambda, aws_iam_role_policy.lambda]
 }
 
 resource "aws_lambda_alias" "live" {

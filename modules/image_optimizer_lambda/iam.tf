@@ -1,3 +1,8 @@
+data "aws_kms_key" "primary_jdbc" {
+  count  = try(trimspace(var.primary_jdbc_secret.kms_key_id), "") == "" ? 0 : 1
+  key_id = var.primary_jdbc_secret.kms_key_id
+}
+
 resource "aws_iam_role" "lambda" {
   name = "${var.name}-role"
 
@@ -24,7 +29,13 @@ resource "aws_iam_role_policy" "lambda" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
+      {
+        Sid      = "ReadPrimaryJdbcSecret"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = var.primary_jdbc_secret.arn
+      },
       {
         Sid    = "ConsumeOptimizerQueue"
         Effect = "Allow"
@@ -52,6 +63,16 @@ resource "aws_iam_role_policy" "lambda" {
         ]
         Resource = "${var.bucket_arn}/*"
       },
-    ]
+      ], [for key in data.aws_kms_key.primary_jdbc : {
+        Sid      = "DecryptPrimaryJdbcSecret"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = key.arn
+        Condition = {
+          StringEquals = {
+            "kms:EncryptionContext:SecretARN" = var.primary_jdbc_secret.arn
+          }
+        }
+    }])
   })
 }
