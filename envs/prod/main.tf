@@ -70,6 +70,7 @@ module "image_optimizer" {
   queue_arn              = module.queue.queue_arn
   watermark_text         = var.watermark_text
   environment_variables  = module.app_config.public_environment
+  primary_jdbc_secret    = module.app_config.primary_jdbc_secret
 }
 
 module "backend" {

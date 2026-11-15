@@ -188,11 +188,9 @@ The name is `<PREFIX><SECRET_KEY>`, where the prefix is `PROD/` for prod and
 | `PROD/COGNITO/JWK_SET_URI` / `DEV/COGNITO/JWK_SET_URI` | `COGNITO_JWK_SET_URI` | `modules/cognito` |
 | `PROD/PRIMARY_JDBC_URL` / `DEV/PRIMARY_JDBC_URL` | `PRIMARY_JDBC_URL` | external (pre-existing) |
 
-`PRIMARY_JDBC_URL` is not created by Terraform. The secret, including its current
-value, must already exist in Secrets Manager (`PROD/PRIMARY_JDBC_URL` or
-`DEV/PRIMARY_JDBC_URL`). Plan fails if the secret is missing or the value is
-empty. The value is read only to perform that check and is not written to state,
-tfvars, or CI variables.
+Create the JDBC secret and its value in Secrets Manager for each environment
+(`PROD/PRIMARY_JDBC_URL` or `DEV/PRIMARY_JDBC_URL`). Terraform looks up the
+secret metadata. The services fetch the JDBC URL at runtime.
 
 The canonical env-var => secret-key maps live once in `modules/app_config`, not
 in each environment root. They drive two things:
@@ -200,7 +198,7 @@ in each environment root. They drive two things:
 1. the backend launch template (secret names and target container env var names),
 2. the backend IAM read allowlist.
 
-The Lambda receives **no secrets** — only the public environment values.
+Terraform passes the primary JDBC secret ARN to the image optimizer. The Lambda reads the value from Secrets Manager at runtime.
 
 At boot, user-data calls `secretsmanager:GetSecretValue` for each allowlisted
 secret through the instance profile, writes the configured environment variable
@@ -280,17 +278,9 @@ an immutable Lambda version. The SQS event source mapping does **not** invoke
 Published versions are never deleted automatically — prune old ones once no alias
 points at them.
 
-The Lambda receives SQS messages, downloads source images from the bucket's
-`listings/` / `users/` prefixes, optimizes them, stamps the watermark
-(`WATERMARK_TEXT`, default `VESTIO`), and writes results back. Configuration is
-passed via env vars: `BUCKET_NAME`, `STATIC_PREFIX`, `LISTINGS_PREFIX`,
-`USERS_PREFIX`, `SQS_QUEUE_URL`, `WATERMARK_TEXT`, plus the backend-compatible
-`S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` values.
+The Lambda consumes listing image events from SQS, writes WebP renditions to S3, and updates the asset filenames and listing status in PostgreSQL. The backend's Liquibase migration for `listing_asset_keys.optimized_name` must be in place before deploying this Lambda image.
 
-The Lambda receives **no secrets**. It gets only the public environment values
-(see the secrets section above), including the backend-compatible
-`S3_ASSETS_BUCKET` and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL` names. Its IAM role has
-no `secretsmanager` permissions.
+The existing Lambda execution role has `secretsmanager:GetSecretValue` on its environment's JDBC secret. For a customer-managed KMS key, it also gets `kms:Decrypt` on that key, scoped to the secret's encryption context. The KMS key policy must allow the role to use this grant. The Lambda must be able to reach the PostgreSQL endpoint from its runtime network.
 
 ## vestio-backend ASG (prod only)
 
@@ -321,7 +311,7 @@ only so the prefixes render in the console. Disable with
 
 ## Cost notes
 
-- Buckets block all public access; serve assets via CloudFront + OAC if needed.
+- Listing WebP images and thumbnails are publicly readable through the assets bucket policy. Public ACLs are blocked.
 - Noncurrent object versions expire after 90 days (`noncurrent_version_expiration_days`).
 - ASG defaults: 1–4 × `t3.small`, CPU target tracking at 60%.
 - Dev has **no** EC2/ALB — it costs only S3/SQS/ECR/(optional Lambda).
