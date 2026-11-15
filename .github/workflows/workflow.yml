@@ -37,11 +37,17 @@ jobs:
           terraform_wrapper: false
       - name: Check formatting
         run: terraform fmt -check -recursive
-      - name: Validate every environment
+      - name: Validate Terraform environments
         shell: bash
         run: |
           set -euo pipefail
-          for dir in envs/*; do
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/heads/dev) dirs=(envs/dev) ;;
+            push:refs/heads/prod) dirs=(envs/prod) ;;
+            *) dirs=(envs/dev envs/prod) ;;
+          esac
+
+          for dir in "${dirs[@]}"; do
             echo "::group::${dir}"
             (
               cd "$dir"
@@ -50,42 +56,6 @@ jobs:
             )
             echo "::endgroup::"
           done
-
-  changes:
-    name: Detect Terraform changes
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    outputs:
-      terraform: ${{ steps.filter.outputs.terraform }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: filter
-        name: Filter changed paths
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          BASE="${{ github.event.before }}"
-          if [ -z "$BASE" ] ||
-            [ "$BASE" = "0000000000000000000000000000000000000000" ] ||
-            ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
-            BASE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
-          fi
-
-          CHANGED="$(git diff --name-only "$BASE" "${{ github.sha }}")"
-          echo "$CHANGED" | sed 's/^/  /'
-
-          if echo "$CHANGED" | grep -Eq '(\.tf$|\.tfvars$)'; then
-            echo "terraform=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "terraform=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # ---------------------------------------------------------------------------
-  # dev: plan and apply automatically, then tag when Terraform changed.
-  # ---------------------------------------------------------------------------
 
   plan-dev:
     name: Plan dev
@@ -129,12 +99,8 @@ jobs:
 
   tag-dev:
     name: Tag dev release
-    needs: [changes, apply-dev, version-dev]
-    if: >-
-      always() &&
-      needs.changes.outputs.terraform == 'true' &&
-      needs.apply-dev.result == 'success' &&
-      needs.version-dev.result == 'success'
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: [apply-dev, version-dev]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -151,11 +117,6 @@ jobs:
           version: ${{ needs.version-dev.outputs.version }}
           git-tag: ${{ needs.version-dev.outputs.git_tag }}
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # prod: plan automatically, apply only after the `prod` environment approves,
-  # then tag when Terraform changed.
-  # ---------------------------------------------------------------------------
 
   plan-prod:
     name: Plan prod
@@ -202,12 +163,8 @@ jobs:
 
   tag-prod:
     name: Tag prod release
-    needs: [changes, apply-prod, version-prod]
-    if: >-
-      always() &&
-      needs.changes.outputs.terraform == 'true' &&
-      needs.apply-prod.result == 'success' &&
-      needs.version-prod.result == 'success'
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/prod' }}
+    needs: [apply-prod, version-prod]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
