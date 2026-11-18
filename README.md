@@ -11,6 +11,8 @@ modules/
   registry/                ECR repositories (scan-on-push, lifecycle policies)
   image_optimizer_lambda/  container-image Lambda + IAM + SQS event source mapping
   cognito/                 user pool + app client + per-value Secrets Manager entries (PROD_/DEV_ prefixed)
+  realtime/                AppSync Events for private chat/notification channels, logs, and alarms
+  public_parameters/       Standard SSM String parameters for non-secret runtime environments
   app_config/              shared secret maps (created + external), public env, IAM read ARNs (backend)
   service_role/            EC2 service role + instance profile (S3, SQS, prefixed secret read, Cognito admin)
   backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data (fetches secrets at boot)
@@ -27,6 +29,7 @@ envs/
 | Bucket | `vestio-dev-assets` | `vestio-assets` |
 | EC2 service role | `vestio-dev-service-role` (instance profile) | `vestio-prod-service-role` (instance profile) |
 | Cognito | `vestio-dev-users` pool + client | `vestio-users` pool + client |
+| AppSync Events | `vestio-dev-realtime` | `vestio-prod-realtime` |
 | Prefixes | `static/`, `listings/`, `users/` (placeholder folders created) | same |
 | SQS | `vestio-dev-image-optimizer` (+ DLQ) | `vestio-image-optimizer` (+ DLQ) |
 | Lambda | `vestio-dev-image-optimizer` | `vestio-image-optimizer` |
@@ -314,4 +317,164 @@ only so the prefixes render in the console. Disable with
 - Listing WebP images and thumbnails are publicly readable through the assets bucket policy. Public ACLs are blocked.
 - Noncurrent object versions expire after 90 days (`noncurrent_version_expiration_days`).
 - ASG defaults: 1–4 × `t3.small`, CPU target tracking at 60%.
-- Dev has **no** EC2/ALB — it costs only S3/SQS/ECR/(optional Lambda).
+- Dev has **no** EC2/ALB; realtime adds usage-based AppSync and CloudWatch costs.
+
+## Chat and live notifications — AppSync Events
+
+`modules/realtime` creates a dedicated Event API in each environment:
+`vestio-dev-realtime` and `vestio-prod-realtime`, in the configured AWS region.
+It creates the `chat` and `notifications` namespaces, error-level CloudWatch
+logging with seven-day retention, and four CloudWatch alarms per environment.
+There are no additional chat servers, Redis clusters, Lambda authorizers, or
+connection tables. AppSync operations, connection minutes, transfer, logs, and
+alarms are usage-billed; alarms can be a meaningful part of a small dev bill.
+
+### Authorization and channels
+
+- Connect and subscribe with a token from that environment's existing Cognito
+  pool and app client. Never expose the app client secret to the browser.
+- Each user subscribes to `/chat/{cognitoSub}` and
+  `/notifications/{cognitoSub}` over one WebSocket connection. Use the Cognito
+  `sub`, not the application's database user ID unless they are identical.
+- The shared `onSubscribe` handler allows only an exact match to the authenticated
+  user's channel. Other users, namespace subscriptions, wildcard subscriptions,
+  and extra path segments are rejected.
+- Only IAM-authenticated publishers may publish. The existing backend role gets
+  `appsync:EventPublish` on its environment's two namespace ARNs, with no
+  connect/subscribe or cross-environment grants. Privileged account IAM principals
+  can still publish if their own policies grant access.
+- Backend publishers use signed HTTPS requests (SigV4 service `appsync`), not
+  WebSockets. No API keys or long-lived AWS keys are added.
+
+### Configuration
+
+Terraform exposes `realtime_api_id`, `realtime_api_arn`,
+`realtime_http_endpoint`, `realtime_websocket_endpoint`,
+`realtime_namespace_arns`, and `realtime_backend_environment` in both environments.
+The HTTP endpoint includes `/event`; the WebSocket endpoint includes
+`/event/realtime`. The frontend must use the AppSync Events protocol/client,
+including its authentication handshake, rather than a generic chat protocol.
+
+Prod's backend launch template receives `APPSYNC_EVENTS_HTTP_ENDPOINT` and
+`APPSYNC_EVENTS_REGION` as non-secret environment variables. Dev still has no
+backend servers: use `realtime_backend_environment` to configure local/dev
+publishing and a suitably scoped developer role. Do not assume local credentials
+automatically have the EC2 service role's permissions.
+
+Set `realtime_alarm_actions` to existing SNS topic ARNs to deliver alarm and
+recovery notifications. The default empty list creates visible CloudWatch alarms
+without sending notifications. HTTP `4XXError`/`5XXError` alarms detect one error
+within five minutes; each namespace's `SubscribeClientError` alarm detects ten
+rejections within five minutes. These use the Event API dimensions
+`EventAPIId` and, for subscriptions, `ChannelNamespaceName`.
+
+Handlers do not log message bodies or tokens. Keep logging at `ERROR`; AWS may
+include request/error context in service logs, so treat log access as sensitive.
+
+### Application work and delivery contract
+
+This repository provisions transport and access control. The backend and frontend
+still need their chat/notification integration:
+
+1. Authorize the action and recipients in the backend.
+2. Save messages/notifications and an outbox record in one PostgreSQL transaction.
+3. Have a backend worker publish committed outbox entries and retry failures,
+   including per-event failures returned in an otherwise successful HTTP response.
+4. Include stable event IDs; clients deduplicate retries and fetch missed updates
+   and unread counts over the existing HTTP API after reconnecting.
+5. Monitor outbox age and terminal failures in the backend. Transport alarms cannot
+   detect a worker that has stopped publishing.
+
+AppSync Events does not provide chat history or offline notification replay.
+Notifications while the app is closed need Web Push/mobile push as a separate
+delivery path. Attachments remain in S3; publish references rather than file data.
+
+### Validation and rollout
+
+AppSync Events resources require the AWS provider upgrade from 5.100.0 to the
+pinned 6.12.0. Review both complete environment plans for provider migration
+changes as well as the realtime additions. Backend environment changes update the
+prod launch template; existing instances need the normal backend rollout to pick
+up the new variables.
+
+```bash
+terraform fmt -check -recursive
+terraform -chdir=envs/dev init -backend=false -input=false
+terraform -chdir=envs/dev validate
+terraform -chdir=envs/prod init -backend=false -input=false
+terraform -chdir=envs/prod validate
+node --test modules/realtime/tests/private-subscription.test.mjs
+terraform -chdir=modules/realtime init -backend=false -input=false
+terraform -chdir=modules/realtime test
+```
+
+For deployment review, initialize each environment's configured backend and run
+`terraform plan` with its real configuration. Use the existing manual approval
+policy before any apply. After an approved dev deployment, verify own-channel
+subscriptions, rejection of other-user/wildcard subscriptions and browser
+publishing, IAM publishing to both namespaces, and reconnect recovery before
+promoting to prod. Local JavaScript tests verify authorization decisions, not the
+AWS-hosted runtime or end-to-end delivery.
+
+
+## Public runtime configuration — Parameter Store
+
+All non-secret runtime environment values configured by this repository are also
+stored as **Standard `String`** SSM parameters, with backend/frontend sharing the
+environment root:
+
+| Path | Contents |
+|---|---|
+| `/vestio/dev/` (direct parameters) | Backend settings and `NEXT_PUBLIC_` frontend settings: Cognito identifiers, bucket/queue values, region, and AppSync endpoints |
+| `/vestio/dev/image-optimizer/` | Exact Lambda environment: bucket/queue aliases, prefixes, watermark, application environment, and JDBC secret ARN metadata |
+
+Prod uses the same paths under `/vestio/prod/`; its backend parameters also include
+`LOGGING_FILE_NAME`. Each parameter's final path segment is its environment
+variable name, e.g. `/vestio/dev/APPSYNC_EVENTS_HTTP_ENDPOINT`.
+Terraform outputs `public_parameter_names` and `public_parameter_paths` expose
+the names and paths. Values remain Terraform-managed; change their source inputs
+rather than manually editing Parameter Store. AWS-generated platform variables
+(such as Lambda's temporary credentials and runtime metadata) are not copied.
+
+The backend role gains individual-parameter reads and `GetParametersByPath` for
+the shared environment root. Local users and frontend CI need their own AWS
+identity with read access to that root. The loader uses non-recursive reads so
+optimizer settings stay separate. A recursive IAM path grant can reach child
+namespaces; this directory layout alone is not an IAM isolation boundary.
+Non-secret does not mean anonymous:
+SSM access still requires IAM authorization. Existing managed role policies may
+already grant additional SSM permissions; these new grants do not remove them.
+
+No client secret, JDBC URL, password, or AWS credential value is added. Known
+credential keys and environment names configured as secrets are rejected by the
+module. Only explicitly non-secret values belong in `backend_environment` or
+other public maps. Cognito's five public identifiers are mirrored in SSM while
+legacy Secrets Manager entries stay in place for compatibility; the Cognito
+client secret and JDBC URL stay in Secrets Manager.
+
+Existing EC2/Lambda environment injection stays in place. Creating SSM parameters
+does not automatically load them into Java, update a running container, or change
+a Next.js deployment. To run a local backend after an approved dev apply, install
+AWS CLI, authenticate your developer profile, and use this repository's helper
+from the backend working directory:
+
+```bash
+python3 /home/youssef-laarossi/Documents/aws-infra/scripts/run-with-public-config.py \
+  --environment dev --service backend --region ca-central-1 --profile YOUR_PROFILE \
+  -- ./gradlew bootRun
+```
+
+Backend and frontend selections both load the shared root;
+`--service image-optimizer` selects the optimizer namespace. The helper reads all
+pages of direct `String` parameters, passes their values to the child process as
+environment variables, and leaves explicit caller overrides
+in place. It does not print values or evaluate shell exports. It fails if the
+path is empty or cannot be read. It loads public defaults only; existing secret
+resolution must still supply `COGNITO_CLIENT_SECRET`, `PRIMARY_JDBC_URL`, and any
+other secret values. Use `--service frontend -- npm run build` from the frontend
+repository to supply public build-time settings (with a permitted identity).
+Next.js `NEXT_PUBLIC_` values are embedded at build time.
+
+These parameters are not available in AWS until the Terraform plan is reviewed
+and applied with explicit environment approval. No SSM writes are performed by
+the local-run helper or validation tests.

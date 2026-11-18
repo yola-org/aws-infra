@@ -89,7 +89,7 @@ locals {
     "COGNITO/CLIENT_ID"     = aws_cognito_user_pool_client.app.id
     "COGNITO/CLIENT_SECRET" = aws_cognito_user_pool_client.app.client_secret
     "COGNITO/USER_POOL_ID"  = aws_cognito_user_pool.this.id
-    "COGNITO/REGION"        = data.aws_region.current.name
+    "COGNITO/REGION"        = data.aws_region.current.region
     "COGNITO/ISSUER_URI"    = local.issuer_uri
     "COGNITO/JWK_SET_URI"   = local.jwks_uri
   }

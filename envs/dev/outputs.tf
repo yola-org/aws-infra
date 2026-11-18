@@ -67,3 +67,43 @@ output "cognito_secret_arns" {
   description = "Map of unprefixed env-var key => dev Secrets Manager secret ARN."
   value       = module.cognito.secret_arns
 }
+
+output "realtime_api_id" {
+  description = "Realtime api id."
+  value       = module.realtime.api_id
+}
+
+output "realtime_api_arn" {
+  description = "Realtime api arn."
+  value       = module.realtime.api_arn
+}
+
+output "realtime_http_endpoint" {
+  description = "Realtime http endpoint."
+  value       = module.realtime.http_endpoint
+}
+
+output "realtime_websocket_endpoint" {
+  description = "Realtime websocket endpoint."
+  value       = module.realtime.websocket_endpoint
+}
+
+output "realtime_namespace_arns" {
+  description = "Realtime namespace arns."
+  value       = module.realtime.namespace_arns
+}
+
+output "realtime_backend_environment" {
+  description = "Realtime backend environment."
+  value       = module.realtime.backend_environment
+}
+
+output "public_parameter_names" {
+  description = "Public Parameter Store names grouped by service and environment variable."
+  value       = module.public_parameters.names
+}
+
+output "public_parameter_paths" {
+  description = "Public configuration paths by service."
+  value       = module.public_parameters.paths
+}

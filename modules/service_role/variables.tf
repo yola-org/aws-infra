@@ -24,3 +24,21 @@ variable "cognito_user_pool_arn" {
   type        = string
   default     = ""
 }
+
+variable "realtime_namespace_arns" {
+  description = "AppSync Events namespaces this backend may publish to. Empty disables the grant."
+  type        = list(string)
+  default     = []
+}
+
+variable "public_parameter_arns" {
+  description = "Exact public Parameter Store parameters the backend may read."
+  type        = list(string)
+  default     = []
+}
+
+variable "public_parameter_path_arn" {
+  description = "Shared environment-root parameter path ARN for bulk reads. Empty disables the grant."
+  type        = string
+  default     = ""
+}

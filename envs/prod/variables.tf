@@ -159,3 +159,9 @@ variable "image_optimizer_ecr_repository_uri" {
   type        = string
   default     = "187692046882.dkr.ecr.ca-central-1.amazonaws.com/vestio/image-optimizer"
 }
+
+variable "realtime_alarm_actions" {
+  description = "Existing SNS topic ARNs for realtime alarm/recovery notifications. Empty means CloudWatch alarms only."
+  type        = list(string)
+  default     = []
+}

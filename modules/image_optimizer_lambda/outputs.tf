@@ -3,6 +3,11 @@ output "lambda_name" {
   value       = aws_lambda_function.this.function_name
 }
 
+output "public_environment" {
+  description = "Effective non-secret Lambda environment mirrored in Parameter Store."
+  value       = local.public_environment
+}
+
 output "lambda_arn" {
   description = "ARN of the function."
   value       = aws_lambda_function.this.arn
