@@ -37,6 +37,14 @@ jobs:
           terraform_wrapper: false
       - name: Check formatting
         run: terraform fmt -check -recursive
+      - name: Test private realtime channel authorization
+        run: node --test modules/realtime/tests/private-subscription.test.mjs
+      - name: Test public configuration loader
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Test realtime Terraform configuration without AWS access
+        run: |
+          terraform -chdir=modules/realtime init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=modules/realtime test -no-color
       - name: Validate Terraform environments
         shell: bash
         run: |

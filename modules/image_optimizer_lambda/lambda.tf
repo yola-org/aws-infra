@@ -1,3 +1,19 @@
+locals {
+  public_environment = merge(
+    var.environment_variables,
+    {
+      APP_ENV                 = var.deployment_environment
+      BUCKET_NAME             = var.bucket_name
+      STATIC_PREFIX           = "static/"
+      LISTINGS_PREFIX         = "listings/"
+      USERS_PREFIX            = "users/"
+      SQS_QUEUE_URL           = var.queue_url
+      WATERMARK_TEXT          = var.watermark_text
+      PRIMARY_JDBC_SECRET_ARN = var.primary_jdbc_secret.arn
+    },
+  )
+}
+
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${var.name}"
   retention_in_days = var.log_retention_in_days
@@ -22,19 +38,7 @@ resource "aws_lambda_function" "this" {
 
   # The Lambda fetches the JDBC secret value at runtime using this ARN.
   environment {
-    variables = merge(
-      var.environment_variables,
-      {
-        APP_ENV                 = var.deployment_environment
-        BUCKET_NAME             = var.bucket_name
-        STATIC_PREFIX           = "static/"
-        LISTINGS_PREFIX         = "listings/"
-        USERS_PREFIX            = "users/"
-        SQS_QUEUE_URL           = var.queue_url
-        WATERMARK_TEXT          = var.watermark_text
-        PRIMARY_JDBC_SECRET_ARN = var.primary_jdbc_secret.arn
-      },
-    )
+    variables = local.public_environment
   }
 
   depends_on = [aws_cloudwatch_log_group.lambda, aws_iam_role_policy.lambda]

@@ -1,10 +1,21 @@
 locals {
-  issuer_uri = "https://cognito-idp.${data.aws_region.current.name}.amazonaws.com/${aws_cognito_user_pool.this.id}"
+  issuer_uri = "https://cognito-idp.${data.aws_region.current.region}.amazonaws.com/${aws_cognito_user_pool.this.id}"
 }
 
 output "user_pool_id" {
   description = "Cognito user pool ID (e.g. ca-central-1_xxxxxxxxx)."
   value       = aws_cognito_user_pool.this.id
+}
+
+output "public_environment" {
+  description = "Non-secret Cognito runtime identifiers. The client secret is deliberately excluded."
+  value = {
+    COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.app.id
+    COGNITO_USER_POOL_ID = aws_cognito_user_pool.this.id
+    COGNITO_REGION       = data.aws_region.current.region
+    COGNITO_ISSUER_URI   = local.issuer_uri
+    COGNITO_JWK_SET_URI  = "${local.issuer_uri}/.well-known/jwks.json"
+  }
 }
 
 output "user_pool_arn" {

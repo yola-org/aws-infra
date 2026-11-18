@@ -40,7 +40,7 @@ resource "aws_launch_template" "this" {
   }
 
   user_data = base64encode(templatefile("${path.module}/templates/vestio-backend-user-data.sh.tpl", {
-    aws_region   = data.aws_region.current.name
+    aws_region   = data.aws_region.current.region
     ecr_url      = var.ecr_repository_url
     image_tag    = var.image_tag
     host_port    = var.host_port

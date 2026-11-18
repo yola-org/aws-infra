@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "6.12.0" # AppSync Events resources; review v6 changes in plans.
     }
   }
 }

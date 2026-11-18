@@ -4,6 +4,7 @@
 locals {
   backend_environment = merge(
     module.app_config.public_environment,
+    module.realtime.backend_environment,
     {
       AWS_REGION  = var.aws_region
       BUCKET_NAME = module.storage.bucket
@@ -51,11 +52,14 @@ module "app_config" {
 module "service_role" {
   source = "../../modules/service_role"
 
-  name                  = "vestio-prod-service-role"
-  bucket_arn            = module.storage.bucket_arn
-  queue_arn             = module.queue.queue_arn
-  secret_read_arns      = module.app_config.secret_read_arns
-  cognito_user_pool_arn = module.cognito.user_pool_arn
+  name                      = "vestio-prod-service-role"
+  bucket_arn                = module.storage.bucket_arn
+  queue_arn                 = module.queue.queue_arn
+  secret_read_arns          = module.app_config.secret_read_arns
+  cognito_user_pool_arn     = module.cognito.user_pool_arn
+  realtime_namespace_arns   = values(module.realtime.namespace_arns)
+  public_parameter_arns     = values(module.public_parameters.arns.backend)
+  public_parameter_path_arn = module.public_parameters.path_arns.backend
 }
 
 module "image_optimizer" {
@@ -91,4 +95,38 @@ module "backend" {
   environment_variables = local.backend_environment
   secret_names          = module.app_config.secret_names
   secret_name_prefix    = var.secret_name_prefix
+}
+
+module "realtime" {
+  source = "../../modules/realtime"
+
+  name                 = "vestio-prod-realtime"
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.client_id
+  alarm_actions        = var.realtime_alarm_actions
+}
+
+module "public_parameters" {
+  source = "../../modules/public_parameters"
+
+  environment = "prod"
+  secret_environment_names = setsubtract(
+    toset(keys(module.app_config.secret_names)),
+    toset(keys(module.cognito.public_environment)),
+  )
+  services = {
+    backend = merge(
+      module.cognito.public_environment,
+      { LOGGING_FILE_NAME = "/logs/app.log" },
+      local.backend_environment,
+    )
+    image-optimizer = module.image_optimizer.public_environment
+    frontend = {
+      NEXT_PUBLIC_APPSYNC_EVENTS_HTTP_ENDPOINT      = module.realtime.http_endpoint
+      NEXT_PUBLIC_APPSYNC_EVENTS_WEBSOCKET_ENDPOINT = module.realtime.websocket_endpoint
+      NEXT_PUBLIC_APPSYNC_EVENTS_REGION             = var.aws_region
+      NEXT_PUBLIC_COGNITO_USER_POOL_ID              = module.cognito.user_pool_id
+      NEXT_PUBLIC_COGNITO_CLIENT_ID                 = module.cognito.client_id
+    }
+  }
 }

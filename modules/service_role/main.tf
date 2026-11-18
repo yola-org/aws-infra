@@ -60,6 +60,30 @@ resource "aws_iam_role_policy" "this" {
           Resource = var.queue_arn
         },
       ],
+      var.public_parameter_path_arn != "" ? [
+        {
+          Sid      = "ReadPublicEnvironmentParameterPath"
+          Effect   = "Allow"
+          Action   = ["ssm:GetParametersByPath"]
+          Resource = var.public_parameter_path_arn
+        },
+      ] : [],
+      length(var.public_parameter_arns) > 0 ? [
+        {
+          Sid      = "ReadPublicRuntimeParameters"
+          Effect   = "Allow"
+          Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+          Resource = var.public_parameter_arns
+        },
+      ] : [],
+      length(var.realtime_namespace_arns) > 0 ? [
+        {
+          Sid      = "PublishRealtimeEvents"
+          Effect   = "Allow"
+          Action   = ["appsync:EventPublish"]
+          Resource = var.realtime_namespace_arns
+        },
+      ] : [],
       length(var.secret_read_arns) > 0 ? [
         {
           # Read this environment's allowlisted Secrets Manager entries.
