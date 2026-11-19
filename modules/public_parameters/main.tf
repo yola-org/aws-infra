@@ -7,7 +7,7 @@ terraform {
 }
 
 variable "environment" {
-  description = "Environment used in /vestio/<environment>/<ENV_VAR>."
+  description = "Environment used in /DEV/<ENV_VAR> or /PROD/<ENV_VAR>."
   type        = string
 
   validation {
@@ -73,7 +73,7 @@ data "aws_caller_identity" "current" {}
 locals {
   paths = {
     for service in keys(var.services) : service =>
-    "/vestio/${var.environment}"
+    "/${upper(var.environment)}"
   }
   parameters = merge([
     for service, values in var.services : {

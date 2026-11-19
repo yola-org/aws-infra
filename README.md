@@ -420,7 +420,9 @@ AWS-hosted runtime or end-to-end delivery.
 ## Public runtime configuration — Parameter Store
 
 Parameter Store contains only shared, non-secret infrastructure values as
-Standard `String` parameters under `/vestio/dev/` and `/vestio/prod/`:
+Standard `String` parameters under `/DEV/` and `/PROD/`, matching the uppercase
+environment prefixes used by Secrets Manager (for example, `/DEV/AWS_REGION`).
+Parameter names have no `vestio` prefix:
 
 - `AWS_REGION`, `S3_ASSETS_BUCKET`, and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL`
 - Cognito public identifiers, region, issuer URI, and JWK set URI
@@ -436,10 +438,13 @@ infrastructure values needed to configure those builds.
 
 The module allows only the shared keys listed above. Terraform outputs
 `public_parameter_names` and `public_parameter_paths` retain the legacy `backend`
-group for compatibility. Existing shared parameter addresses and paths stay the
-same. The next approved apply removes previously managed frontend parameters,
-optimizer parameters, and backend-specific parameters. Review that removal in
-each environment's plan before applying.
+group for compatibility. Terraform resource addresses stay the same, but shared
+parameters are renamed from `/vestio/dev/<ENV_VAR>` and `/vestio/prod/<ENV_VAR>`
+to `/DEV/<ENV_VAR>` and `/PROD/<ENV_VAR>`. This replaces the existing parameters
+and updates the backend role’s read permissions. The next approved apply also
+removes previously managed frontend parameters, optimizer parameters, and
+backend-specific parameters. Review these changes in each environment’s plan
+before applying, and update external readers to use the new paths.
 
 The backend role can read the shared parameters individually or by path. Local
 users need an AWS identity with read access to the environment root. Known
