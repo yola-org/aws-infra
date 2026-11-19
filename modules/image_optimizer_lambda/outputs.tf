@@ -4,7 +4,7 @@ output "lambda_name" {
 }
 
 output "public_environment" {
-  description = "Effective non-secret Lambda environment mirrored in Parameter Store."
+  description = "Effective non-secret environment injected directly into the Lambda."
   value       = local.public_environment
 }
 

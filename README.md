@@ -12,7 +12,7 @@ modules/
   image_optimizer_lambda/  container-image Lambda + IAM + SQS event source mapping
   cognito/                 user pool + app client + per-value Secrets Manager entries (PROD_/DEV_ prefixed)
   realtime/                AppSync Events for private chat/notification channels, logs, and alarms
-  public_parameters/       Standard SSM String parameters for non-secret runtime environments
+  public_parameters/       Standard SSM String parameters for shared infrastructure values
   app_config/              shared secret maps (created + external), public env, IAM read ARNs (backend)
   service_role/            EC2 service role + instance profile (S3, SQS, prefixed secret read, Cognito admin)
   backend/                 dedicated VPC, ALB, target group, launch template, ASG, user-data (fetches secrets at boot)
@@ -419,44 +419,36 @@ AWS-hosted runtime or end-to-end delivery.
 
 ## Public runtime configuration — Parameter Store
 
-All non-secret runtime environment values configured by this repository are also
-stored as **Standard `String`** SSM parameters, with backend/frontend sharing the
-environment root:
+Parameter Store contains only shared, non-secret infrastructure values as
+Standard `String` parameters under `/vestio/dev/` and `/vestio/prod/`:
 
-| Path | Contents |
-|---|---|
-| `/vestio/dev/` (direct parameters) | Backend settings and `NEXT_PUBLIC_` frontend settings: Cognito identifiers, bucket/queue values, region, and AppSync endpoints |
-| `/vestio/dev/image-optimizer/` | Exact Lambda environment: bucket/queue aliases, prefixes, watermark, application environment, and JDBC secret ARN metadata |
+- `AWS_REGION`, `S3_ASSETS_BUCKET`, and `SQS_IMAGE_OPTIMIZATION_QUEUE_URL`
+- Cognito public identifiers, region, issuer URI, and JWK set URI
+- `APPSYNC_EVENTS_HTTP_ENDPOINT` and `APPSYNC_EVENTS_REGION`
 
-Prod uses the same paths under `/vestio/prod/`; its backend parameters also include
-`LOGGING_FILE_NAME`. Each parameter's final path segment is its environment
-variable name, e.g. `/vestio/dev/APPSYNC_EVENTS_HTTP_ENDPOINT`.
-Terraform outputs `public_parameter_names` and `public_parameter_paths` expose
-the names and paths. Values remain Terraform-managed; change their source inputs
-rather than manually editing Parameter Store. AWS-generated platform variables
-(such as Lambda's temporary credentials and runtime metadata) are not copied.
+Do not store `NEXT_*` variables or service-specific settings in Parameter Store.
+Backend overrides, `BUCKET_NAME`, and `LOGGING_FILE_NAME` are passed directly to
+the backend container. Lambda settings (including prefixes, watermark, `APP_ENV`,
+and JDBC secret metadata) are passed directly through its environment block.
+Frontend builds must receive their `NEXT_*` settings through their deployment
+configuration; existing Cognito and realtime Terraform outputs supply the
+infrastructure values needed to configure those builds.
 
-The backend role gains individual-parameter reads and `GetParametersByPath` for
-the shared environment root. Local users and frontend CI need their own AWS
-identity with read access to that root. The loader uses non-recursive reads so
-optimizer settings stay separate. A recursive IAM path grant can reach child
-namespaces; this directory layout alone is not an IAM isolation boundary.
-Non-secret does not mean anonymous:
-SSM access still requires IAM authorization. Existing managed role policies may
-already grant additional SSM permissions; these new grants do not remove them.
+The module allows only the shared keys listed above. Terraform outputs
+`public_parameter_names` and `public_parameter_paths` retain the legacy `backend`
+group for compatibility. Existing shared parameter addresses and paths stay the
+same. The next approved apply removes previously managed frontend parameters,
+optimizer parameters, and backend-specific parameters. Review that removal in
+each environment's plan before applying.
 
-No client secret, JDBC URL, password, or AWS credential value is added. Known
-credential keys and environment names configured as secrets are rejected by the
-module. Only explicitly non-secret values belong in `backend_environment` or
-other public maps. Cognito's five public identifiers are mirrored in SSM while
-legacy Secrets Manager entries stay in place for compatibility; the Cognito
+The backend role can read the shared parameters individually or by path. Local
+users need an AWS identity with read access to the environment root. Known
+credential keys and names configured as secrets are rejected. Cognito's legacy
+Secrets Manager entries remain for compatibility; secrets such as the Cognito
 client secret and JDBC URL stay in Secrets Manager.
 
-Existing EC2/Lambda environment injection stays in place. Creating SSM parameters
-does not automatically load them into Java, update a running container, or change
-a Next.js deployment. To run a local backend after an approved dev apply, install
-AWS CLI, authenticate your developer profile, and use this repository's helper
-from the backend working directory:
+To load shared infrastructure defaults for a local backend, authenticate AWS CLI
+and run this helper from the backend working directory:
 
 ```bash
 python3 /home/youssef-laarossi/Documents/aws-infra/scripts/run-with-public-config.py \
@@ -464,17 +456,12 @@ python3 /home/youssef-laarossi/Documents/aws-infra/scripts/run-with-public-confi
   -- ./gradlew bootRun
 ```
 
-Backend and frontend selections both load the shared root;
-`--service image-optimizer` selects the optimizer namespace. The helper reads all
-pages of direct `String` parameters, passes their values to the child process as
-environment variables, and leaves explicit caller overrides
-in place. It does not print values or evaluate shell exports. It fails if the
-path is empty or cannot be read. It loads public defaults only; existing secret
-resolution must still supply `COGNITO_CLIENT_SECRET`, `PRIMARY_JDBC_URL`, and any
-other secret values. Use `--service frontend -- npm run build` from the frontend
-repository to supply public build-time settings (with a permitted identity).
-Next.js `NEXT_PUBLIC_` values are embedded at build time.
+The helper reads direct `String` parameters, preserves caller overrides, and
+passes values to the child process without printing them or evaluating shell
+exports. It fails if the path is empty or cannot be read. Supply service-specific
+settings separately and keep the existing secret resolution for
+`COGNITO_CLIENT_SECRET`, `PRIMARY_JDBC_URL`, and other secrets. The helper does not
+support frontend or optimizer service maps.
 
-These parameters are not available in AWS until the Terraform plan is reviewed
-and applied with explicit environment approval. No SSM writes are performed by
-the local-run helper or validation tests.
+Terraform changes require a reviewed plan and explicit environment approval
+before apply. The local helper and validation tests perform no SSM writes.

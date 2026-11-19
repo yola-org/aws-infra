@@ -80,23 +80,14 @@ module "public_parameters" {
     toset(keys(module.app_config.secret_names)),
     toset(keys(module.cognito.public_environment)),
   )
+  # Keep the backend group for stable Terraform addresses. Only shared
+  # infrastructure values belong here; service settings are injected directly.
   services = {
     backend = merge(
       module.cognito.public_environment,
-      merge(
-        module.app_config.public_environment,
-        module.realtime.backend_environment,
-        { AWS_REGION = var.aws_region, BUCKET_NAME = module.storage.bucket },
-        var.backend_environment,
-      ),
+      module.app_config.public_environment,
+      module.realtime.backend_environment,
+      { AWS_REGION = var.aws_region },
     )
-    image-optimizer = module.image_optimizer.public_environment
-    frontend = {
-      NEXT_PUBLIC_APPSYNC_EVENTS_HTTP_ENDPOINT      = module.realtime.http_endpoint
-      NEXT_PUBLIC_APPSYNC_EVENTS_WEBSOCKET_ENDPOINT = module.realtime.websocket_endpoint
-      NEXT_PUBLIC_APPSYNC_EVENTS_REGION             = var.aws_region
-      NEXT_PUBLIC_COGNITO_USER_POOL_ID              = module.cognito.user_pool_id
-      NEXT_PUBLIC_COGNITO_CLIENT_ID                 = module.cognito.client_id
-    }
   }
 }
