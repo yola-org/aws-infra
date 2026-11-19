@@ -7,7 +7,7 @@ terraform {
 }
 
 variable "environment" {
-  description = "Environment used in /vestio/<environment>/<ENV_VAR>; optimizer retains a service namespace."
+  description = "Environment used in /vestio/<environment>/<ENV_VAR>."
   type        = string
 
   validation {
@@ -17,12 +17,26 @@ variable "environment" {
 }
 
 variable "services" {
-  description = "Non-secret environment maps. Backend/frontend share the environment root; other services retain their namespace."
+  description = "Shared non-secret infrastructure values, retained under the backend group for stable resource addresses."
   type        = map(map(string))
 
   validation {
-    condition     = length(setintersection(toset(keys(lookup(var.services, "backend", {}))), toset(keys(lookup(var.services, "frontend", {}))))) == 0
-    error_message = "Backend and frontend keys must be distinct because they share one Parameter Store path."
+    condition     = length(setsubtract(toset(keys(var.services)), toset(["backend"]))) == 0
+    error_message = "Only the shared infrastructure group (backend) is allowed; inject service-specific configuration directly."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for values in values(var.services) : [
+        for name in keys(values) : contains([
+          "AWS_REGION", "S3_ASSETS_BUCKET", "SQS_IMAGE_OPTIMIZATION_QUEUE_URL",
+          "COGNITO_CLIENT_ID", "COGNITO_USER_POOL_ID", "COGNITO_REGION",
+          "COGNITO_ISSUER_URI", "COGNITO_JWK_SET_URI",
+          "APPSYNC_EVENTS_HTTP_ENDPOINT", "APPSYNC_EVENTS_REGION",
+        ], name)
+      ]
+    ]))
+    error_message = "Only shared infrastructure keys belong in Parameter Store; NEXT_* and service-specific settings must be passed directly to the service."
   }
 
   validation {
@@ -59,7 +73,7 @@ data "aws_caller_identity" "current" {}
 locals {
   paths = {
     for service in keys(var.services) : service =>
-    contains(["backend", "frontend"], service) ? "/vestio/${var.environment}" : "/vestio/${var.environment}/${service}"
+    "/vestio/${var.environment}"
   }
   parameters = merge([
     for service, values in var.services : {
@@ -104,7 +118,7 @@ output "arns" {
 }
 
 output "paths" {
-  description = "Backend/frontend share the environment root; optimizer has its own namespace."
+  description = "Shared infrastructure path, retained under the backend group for compatibility."
   value       = local.paths
 }
 

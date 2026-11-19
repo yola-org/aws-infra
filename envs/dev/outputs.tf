@@ -99,11 +99,11 @@ output "realtime_backend_environment" {
 }
 
 output "public_parameter_names" {
-  description = "Public Parameter Store names grouped by service and environment variable."
+  description = "Shared infrastructure Parameter Store names (legacy backend group)."
   value       = module.public_parameters.names
 }
 
 output "public_parameter_paths" {
-  description = "Public configuration paths by service."
+  description = "Shared infrastructure configuration paths (legacy backend group)."
   value       = module.public_parameters.paths
 }
