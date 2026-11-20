@@ -48,6 +48,12 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = var.queue_arn
       },
       {
+        Sid      = "PublishListingNotifications"
+        Effect   = "Allow"
+        Action   = ["appsync:EventPublish"]
+        Resource = var.notification_namespace_arn
+      },
+      {
         Sid      = "ListAssetsBucket"
         Effect   = "Allow"
         Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
