@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a command with a service's public SSM parameters as environment variables."""
+"""Run a command with shared public infrastructure defaults from SSM."""
 
 import argparse
 import json
@@ -27,14 +27,16 @@ def load_environment(parameters, path):
 
 
 def parameter_path(environment, service):
-    root = f"/vestio/{environment}"
-    return root + "/image-optimizer" if service == "image-optimizer" else root
+    root = f"/{environment.upper()}"
+    if service != "backend":
+        raise ValueError("Only shared infrastructure defaults are stored; configure service settings directly")
+    return root
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment", choices=["dev", "prod"], required=True)
-    parser.add_argument("--service", choices=["backend", "image-optimizer", "frontend"], default="backend")
+    parser.add_argument("--service", choices=["backend"], default="backend")
     parser.add_argument("--region", default="ca-central-1")
     parser.add_argument("--profile")
     parser.add_argument("command", nargs=argparse.REMAINDER)

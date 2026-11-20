@@ -100,3 +100,8 @@ variable "primary_jdbc_secret" {
     kms_key_id = string
   })
 }
+
+variable "notification_namespace_arn" {
+  description = "AppSync notifications namespace ARN used for listing-ready events."
+  type        = string
+}

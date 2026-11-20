@@ -8,13 +8,16 @@ spec.loader.exec_module(module)
 
 
 class PublicConfigTest(unittest.TestCase):
-    path = "/vestio/dev"
+    path = "/DEV"
 
-    def test_shared_root_and_optimizer_namespace(self):
+    def test_shared_root(self):
         for environment in ("dev", "prod"):
-            for service in ("backend", "frontend"):
-                self.assertEqual(module.parameter_path(environment, service), f"/vestio/{environment}")
-            self.assertEqual(module.parameter_path(environment, "image-optimizer"), f"/vestio/{environment}/image-optimizer")
+            self.assertEqual(module.parameter_path(environment, "backend"), f"/{environment.upper()}")
+
+    def test_rejects_service_parameter_namespaces(self):
+        for service in ("frontend", "image-optimizer"):
+            with self.subTest(service=service), self.assertRaises(ValueError):
+                module.parameter_path("dev", service)
 
     def parameter(self, name="AWS_REGION", kind="String", value="ca-central-1"):
         return {"Name": self.path + "/" + name, "Type": kind, "Value": value}
@@ -28,7 +31,7 @@ class PublicConfigTest(unittest.TestCase):
             module.load_environment([self.parameter(kind="SecureString")], self.path)
 
     def test_rejects_other_paths_and_nested_names(self):
-        for name in ["/vestio/prod/AWS_REGION", self.path + "/image-optimizer/BUCKET_NAME", self.path + "/BAD-NAME"]:
+        for name in ["/PROD/AWS_REGION", "/vestio/dev/AWS_REGION", "/dev/AWS_REGION", self.path + "/image-optimizer/BUCKET_NAME", self.path + "/BAD-NAME"]:
             with self.subTest(name=name), self.assertRaises(ValueError):
                 module.load_environment([{"Name": name, "Type": "String", "Value": "x"}], self.path)
 
