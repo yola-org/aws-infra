@@ -470,3 +470,17 @@ support frontend or optimizer service maps.
 
 Terraform changes require a reviewed plan and explicit environment approval
 before apply. The local helper and validation tests perform no SSM writes.
+
+### Public profile images
+
+User images reuse the existing environment assets bucket (`vestio-dev-assets`
+or `vestio-assets`), under `users/{userId}/profile/{randomUuid}.{jpg|png|webp}`.
+The storage bucket policy grants public `GetObject` only for these image paths,
+in addition to the existing listing-image paths. Other user assets remain private.
+The backend service role already has S3 read/write/delete permission. Profile
+uploads are synchronous backend-to-S3 writes and do not publish to the optimizer
+queue or introduce bucket notifications.
+
+Generate and review plans for each environment before deployment, with the
+required `image_optimizer_image_tag` configured. Review any unrelated optimizer
+changes separately and follow the existing apply policy.

@@ -59,6 +59,16 @@ resource "aws_s3_bucket_policy" "public_listing_images" {
         "${aws_s3_bucket.this.arn}/listings/*/*/original-thumbnail.webp",
         "${aws_s3_bucket.this.arn}/listings/*/*/original-thumbnail-mobile.webp",
       ]
+      # Avatars are public. Limit access to the dedicated profile-image path;
+      # other objects under users/ remain private.
+      }, {
+      Sid       = "ReadPublicProfileImages"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "s3:GetObject"
+      Resource = [for extension in ["jpg", "png", "webp"] :
+        "${aws_s3_bucket.this.arn}/users/????????-????-????-????-????????????/profile/????????-????-????-????-????????????.${extension}"
+      ]
     }]
   })
 
