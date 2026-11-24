@@ -5,7 +5,7 @@ resource "aws_cognito_user_pool" "this" {
 
   # Email-based sign-in
   username_attributes      = ["email"]
-  auto_verified_attributes = ["email"]
+  auto_verified_attributes = [] # Backend sends and validates confirmation PINs through Resend.
 
   deletion_protection = var.deletion_protection
   mfa_configuration   = var.mfa_configuration
@@ -20,13 +20,9 @@ resource "aws_cognito_user_pool" "this" {
 
   account_recovery_setting {
     recovery_mechanism {
-      name     = "verified_email"
+      name     = "admin_only"
       priority = 1
     }
-  }
-
-  email_configuration {
-    email_sending_account = "COGNITO_DEFAULT"
   }
 
   schema {
@@ -41,14 +37,8 @@ resource "aws_cognito_user_pool" "this" {
     }
   }
 
-  verification_message_template {
-    default_email_option = "CONFIRM_WITH_CODE"
-  }
-
-  # Keep payloads small; extend with custom attributes as needed.
-  user_attribute_update_settings {
-    attributes_require_verification_before_update = ["email"]
-  }
+  # Email confirmation and any future recovery emails are owned by the backend.
+  # No Cognito email verification, recovery, or email MFA is configured.
 }
 
 resource "aws_cognito_user_pool_client" "app" {

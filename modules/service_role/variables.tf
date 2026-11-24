@@ -20,7 +20,7 @@ variable "secret_read_arns" {
 }
 
 variable "cognito_user_pool_arn" {
-  description = "ARN of the environment's Cognito pool. Grants cognito-idp:AdminInitiateAuth (backend /api/auth/login). Empty = no Cognito permission."
+  description = "ARN of the environment's Cognito pool. Grants scoped Cognito login and backend-owned email confirmation actions. Empty = no Cognito permission."
   type        = string
   default     = ""
 }

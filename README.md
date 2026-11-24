@@ -150,7 +150,7 @@ Each env creates an **email-based** Cognito user pool (`vestio-dev-users` /
 `vestio-users`) and an app client (`generate_secret = true`, SRP + password + refresh +
 **admin-password** auth flows — the backend's `/api/auth/login` uses `ADMIN_NO_SRP_AUTH` —
 access token 1h / ID token 24h / refresh 30d, min password length 12 with
-all character classes, verified-email recovery, MFA off by default).
+all character classes, admin-only recovery, MFA off by default).
 
 The backend calls Cognito itself: `signup` → `SignUp` (public API, no IAM permission
 needed, SECRET_HASH derived from the client secret), `login` → `AdminInitiateAuth`
@@ -250,8 +250,8 @@ Notes:
   prod.
 - The old single-JSON secret (`vestio/cognito-client-secret`) is no longer used
   by the backend.
-- Pool sign-up auto-verifies email via Cognito's default email sender; for real
-  deliverability switch `email_configuration` to SES once your domain is verified.
+- Pool sign-up email and password-recovery email are disabled in Cognito. The
+  backend sends confirmation PINs and welcome emails through Resend.
 - Set `deletion_protection = "ACTIVE"` on the pool input when prod is stable.
 - Secret values still live in the Terraform state — keep state in the encrypted,
   locked S3 bucket and never commit it.
@@ -484,3 +484,14 @@ queue or introduce bucket notifications.
 Generate and review plans for each environment before deployment, with the
 required `image_optimizer_image_tag` configured. Review any unrelated optimizer
 changes separately and follow the existing apply policy.
+
+### Backend-owned account confirmation
+
+The backend sends confirmation PINs and welcome messages through Resend. Cognito
+has no automatic verified attributes and account recovery is `admin_only`, so
+signup and forgot-password do not send Cognito email. Email MFA is not enabled.
+The backend validates its latest stored PIN before calling `AdminConfirmSignUp`
+and `AdminUpdateUserAttributes` with `email_verified=true`. Its role also permits
+`AdminGetUser` to recover a partially completed confirmation. These actions are
+scoped to the environment's user pool. Any future password recovery must use a
+backend-owned flow rather than Cognito's `ForgotPassword` email delivery.
