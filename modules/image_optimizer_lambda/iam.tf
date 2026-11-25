@@ -54,6 +54,13 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = var.notification_namespace_arn
       },
       {
+        Sid    = "ModerateListingImages"
+        Effect = "Allow"
+        Action = ["rekognition:DetectModerationLabels"]
+        # DetectModerationLabels does not support resource-level permissions.
+        Resource = "*"
+      },
+      {
         Sid      = "ListAssetsBucket"
         Effect   = "Allow"
         Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
