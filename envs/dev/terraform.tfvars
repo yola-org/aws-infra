@@ -1,1 +1,1 @@
-image_optimizer_image_tag = "1.5.0"
+image_optimizer_image_tag = "1.6.0"
