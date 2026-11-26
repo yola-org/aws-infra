@@ -493,5 +493,8 @@ signup and forgot-password do not send Cognito email. Email MFA is not enabled.
 The backend validates its latest stored PIN before calling `AdminConfirmSignUp`
 and `AdminUpdateUserAttributes` with `email_verified=true`. Its role also permits
 `AdminGetUser` to recover a partially completed confirmation. These actions are
-scoped to the environment's user pool. Any future password recovery must use a
-backend-owned flow rather than Cognito's `ForgotPassword` email delivery.
+scoped to the environment's user pool. Password recovery uses the backend-owned flow rather than Cognito's
+`ForgotPassword` email delivery. The backend role additionally permits
+`AdminSetUserPassword` and `AdminUserGlobalSignOut` on this pool for reset
+completion and session revocation. Resend delivers both reset codes and password
+change notifications.

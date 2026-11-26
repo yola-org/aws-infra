@@ -98,7 +98,7 @@ resource "aws_iam_role_policy" "this" {
           # /api/auth/login uses Cognito ADMIN_NO_SRP_AUTH.
           Sid      = "AdminInitiateAuth"
           Effect   = "Allow"
-          Action   = ["cognito-idp:AdminInitiateAuth", "cognito-idp:AdminConfirmSignUp", "cognito-idp:AdminGetUser", "cognito-idp:AdminUpdateUserAttributes"]
+          Action   = ["cognito-idp:AdminInitiateAuth", "cognito-idp:AdminConfirmSignUp", "cognito-idp:AdminGetUser", "cognito-idp:AdminUpdateUserAttributes", "cognito-idp:AdminSetUserPassword", "cognito-idp:AdminUserGlobalSignOut"]
           Resource = var.cognito_user_pool_arn
         },
       ] : [],
